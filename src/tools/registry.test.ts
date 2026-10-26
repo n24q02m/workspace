@@ -21,7 +21,10 @@ vi.mock('./domains/drive.js', () => ({
 
 vi.mock('./config.js', () => ({ config: vi.fn() }))
 
-vi.mock('../auth/credential-state.js', () => ({ getState: vi.fn(() => 'configured') }))
+vi.mock('../auth/credential-state.js', () => ({
+  getState: vi.fn(() => 'configured'),
+  resolveCredentialState: vi.fn(async () => 'awaiting_setup')
+}))
 
 // Mock node:path to allow simulating path traversal by controlling relative()
 const { mockJoin, mockRelative, mockIsAbsolute } = vi.hoisted(() => ({
