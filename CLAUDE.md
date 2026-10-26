@@ -84,5 +84,5 @@ bun run build       # tsc -build + scripts/build-cli.js -> bin/cli.mjs
 
 ## Dependency dac biet
 
-`@n24q02m/hull` ^0.4.0 thay cho `@n24q02m/mcp-core`. Hull cung cap `runHttpServer` (auth `multi`, bearer qua `WORKSPACE_USERS_FILE`), `PerPluginStore`, `runWithAuthContext`/`currentUser`, va `buildCli` (lenh `auth` = `authCommand` trong `src/auth/cli-auth.ts`).
+`@n24q02m/hull` ^0.4.0 thay cho package nen MCP cu (da retire). Hull cung cap `runHttpServer` (auth `multi`, bearer qua `WORKSPACE_USERS_FILE`), `PerPluginStore`, `runWithAuthContext`/`currentUser`, va `buildCli` (lenh `auth` = `authCommand` trong `src/auth/cli-auth.ts`).
 
