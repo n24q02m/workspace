@@ -40,7 +40,7 @@ export interface LoopbackConsent {
 const HOST = '127.0.0.1'
 const CALLBACK_PATH = '/callback'
 
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (ch) => {
     switch (ch) {
       case '&':

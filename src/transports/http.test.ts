@@ -89,4 +89,18 @@ describe('startHttp', () => {
     expect(typeof server.connect).toBe('function')
     expect(registerTools).toHaveBeenCalledWith(server, { allowLocalFilesystem: false })
   })
+
+  it('closes the hull handle and resolves when the process receives SIGINT', async () => {
+    process.env.CREDENTIAL_SECRET = 'test-credential-secret'
+    const close = vi.fn().mockResolvedValue(undefined)
+    mockedRunHttpServer.mockResolvedValue({ port: 0, host: '127.0.0.1', close } as never)
+
+    const running = startHttp()
+    // Let startHttp pass its await on hull and register the signal handlers.
+    await new Promise((resolve) => setImmediate(resolve))
+    process.emit('SIGINT')
+
+    await running
+    expect(close).toHaveBeenCalledOnce()
+  })
 })

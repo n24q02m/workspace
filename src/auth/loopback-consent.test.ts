@@ -1,6 +1,7 @@
+import { connect } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GOOGLE_AUTHORIZE_URL, GOOGLE_TOKEN_URL } from '../constants.js'
-import { startLoopbackConsent } from './loopback-consent.js'
+import { escapeHtml, startLoopbackConsent } from './loopback-consent.js'
 
 const realFetch = globalThis.fetch
 const idToken = `${Buffer.from('{"alg":"none"}').toString('base64url')}.${Buffer.from('{"email":"a@example.com"}').toString('base64url')}.sig`
@@ -34,6 +35,20 @@ async function start(onTokens = vi.fn(async () => {})) {
 
 function stateFrom(location: string | null): string {
   return new URL(location ?? '').searchParams.get('state') ?? ''
+}
+
+/** Sends a raw HTTP request, bypassing fetch's URL normalization, and returns the reply. */
+function rawRequest(port: number, request: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(port, '127.0.0.1', () => socket.write(request))
+    let data = ''
+    socket.setEncoding('utf8')
+    socket.on('data', (chunk: string) => {
+      data += chunk
+    })
+    socket.on('end', () => resolve(data))
+    socket.on('error', reject)
+  })
 }
 
 describe('startLoopbackConsent', () => {
@@ -123,5 +138,21 @@ describe('startLoopbackConsent', () => {
     const { handle } = await start()
     expect((await realFetch(`${handle.url}nope`)).status).toBe(404)
     expect((await realFetch(handle.url, { method: 'POST' })).status).toBe(405)
+  })
+
+  it('answers a request target that cannot be parsed with a 500 page and keeps serving', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { handle } = await start()
+    const reply = await rawRequest(handle.port, 'GET http://[bad/ HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n')
+    expect(reply).toMatch(/^HTTP\/1\.1 500 /)
+    expect(reply).toContain('Unexpected error.')
+    expect(consoleError).toHaveBeenCalledWith('[workspace] consent request failed:', expect.any(TypeError))
+    expect((await realFetch(`${handle.url}nope`)).status).toBe(404)
+  })
+})
+
+describe('escapeHtml', () => {
+  it('escapes markup and quote characters so page text cannot inject HTML', () => {
+    expect(escapeHtml('<a href="x">&\'</a>')).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&#39;&lt;/a&gt;')
   })
 })

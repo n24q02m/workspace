@@ -107,8 +107,8 @@ export async function bootstrap(selectedMode: string = mode) {
   }
 }
 
-// Only run the CLI when this file is the entry point, and not inside the test environment.
-if (isMain(import.meta.url) && process.env.NODE_ENV !== 'test') {
+// Builds the console-script CLI and runs it. Exported so the entry wiring is testable.
+export function runCli(argv: string[]): Promise<void> {
   const cli = buildCli(SERVER_NAME, {
     serve: () => bootstrap(),
     extra: { auth: authCommand },
@@ -116,7 +116,12 @@ if (isMain(import.meta.url) && process.env.NODE_ENV !== 'test') {
     // Credentials are stored under STORE_PLUGIN, so `config`/`status` must read the same slug.
     pluginName: STORE_PLUGIN
   })
-  cli(process.argv.slice(2)).then((code) => {
+  return cli(argv).then((code) => {
     process.exitCode = code
   })
+}
+
+// Only run the CLI when this file is the entry point, and not inside the test environment.
+if (isMain(import.meta.url) && process.env.NODE_ENV !== 'test') {
+  runCli(process.argv.slice(2))
 }
