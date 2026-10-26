@@ -111,7 +111,14 @@ export async function bootstrap(selectedMode: string = mode) {
 export function runCli(argv: string[]): Promise<void> {
   const cli = buildCli(SERVER_NAME, {
     serve: () => bootstrap(),
-    extra: { auth: authCommand },
+    extra: {
+      auth: authCommand,
+      // Hull's built-in `relay` is not part of this server; refuse it with a pointer to `auth`.
+      relay: async () => {
+        console.error('relay was removed; run `workspace auth` (see README)')
+        return 2
+      }
+    },
     version: getPackageVersion(),
     // Credentials are stored under STORE_PLUGIN, so `config`/`status` must read the same slug.
     pluginName: STORE_PLUGIN

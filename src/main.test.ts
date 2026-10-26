@@ -231,4 +231,19 @@ describe('runCli', () => {
       else process.env.BETTER_WORKSPACE_MCP_BOOTSTRAPPED = originalGuard
     }
   })
+
+  it('refuses the removed hull relay built-in with exit 2 and a pointer to auth', async () => {
+    vi.mocked(buildCli).mockReturnValue(vi.fn().mockResolvedValue(0) as never)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      await runCli(['relay'])
+      const options = vi.mocked(buildCli).mock.calls.at(-1)?.[1] as unknown as {
+        extra: { relay: () => Promise<number> }
+      }
+      expect(await options.extra.relay()).toBe(2)
+      expect(errorSpy).toHaveBeenCalledWith('relay was removed; run `workspace auth` (see README)')
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
 })
