@@ -8,14 +8,14 @@
  * status, and the credential-gate/dispatch machinery -- hermetically, no
  * real Google network calls.
  *
- * Hermetic OAuth: mcp-core's PerPluginStore encrypts tokens with a
- * machine-bound key file (~/.<plugin>-mcp/.secret) that lives under
+ * Hermetic OAuth: hull's PerPluginStore encrypts tokens with a
+ * machine-bound key file (~/.<plugin>/.secret) that lives under
  * getHomeDir(). setHomeDirForTesting() only overrides getHomeDir() in THIS
  * process, so seeding a fake token here would be invisible to the spawned
  * child (a separate OS process) unless both agree on the same home dir. We
  * seed via setHomeDirForTesting() (writes the real .secret + config.json
  * files into a temp dir), then pass that same temp dir to the child via
- * HOME/USERPROFILE env vars -- os.homedir() (mcp-core's fallback once the
+ * HOME/USERPROFILE env vars -- os.homedir() (the store's fallback once the
  * in-process override is cleared) honors HOME on POSIX and USERPROFILE on
  * Windows, so the child resolves the identical on-disk paths and decrypts
  * the token we already wrote. No browser OAuth, no network.
@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { PerPluginStore, setHomeDirForTesting } from '@n24q02m/mcp-core/storage'
+import { PerPluginStore, setHomeDirForTesting } from '@n24q02m/hull/storage'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { STORE_PLUGIN } from '../../src/constants.js'
 import { DOMAINS } from '../../src/tools/domains/index.js'
@@ -55,15 +55,9 @@ describe('M1 stdio protocol E2E', () => {
     testHomeDir = mkdtempSync(join(tmpdir(), 'bws-protocol-test-'))
     setHomeDirForTesting(testHomeDir)
     try {
-      // Structurally-valid fake token: enough fields for WorkspaceAuth.getAuthenticatedClient()
-      // to consider the account 'configured' without ever hitting the network.
-      //
-      // Must be the v2 multi-account blob, not M2's flat predecessor. A flat blob
-      // carries no email, so getAuthenticatedClient() would take the legacy-adoption
-      // path and ask Google userinfo who owns the token -- a real network call, with
-      // this fake token, whose failure leaves the server 'awaiting_setup' and makes it
-      // start the browser OAuth server instead of stdio (the client then never
-      // connects). Seed the current on-disk shape and the test stays hermetic.
+      // Structurally-valid fake token in the current v2 multi-account blob. A blob without
+      // an email would make the server look up the token owner on Google userinfo, a real
+      // network call; the seeded email keeps the server 'configured' and the test hermetic.
       await new PerPluginStore(STORE_PLUGIN).save({
         version: 2,
         accounts: {

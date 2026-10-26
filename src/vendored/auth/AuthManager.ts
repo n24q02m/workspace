@@ -1,5 +1,5 @@
 // Shim implementing the upstream AuthManager contract (getAuthenticatedClient)
-// so byte-identical vendored services run unmodified over our mcp-core auth.
+// so byte-identical vendored services run unmodified over our hull-backed auth.
 // Real credential logic lives in src/auth/WorkspaceAuth. Upstream's
 // AuthManager(scopes) + getAuthenticatedClient() surface is preserved -- the
 // selected account travels via AsyncLocalStorage (see auth/account-context.ts)

@@ -1,4 +1,8 @@
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import type * as Hull from '@n24q02m/hull'
+import { buildCli } from '@n24q02m/hull'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // startServer/bootstrap need every I/O-touching dependency mocked so the
@@ -9,8 +13,13 @@ vi.mock('./auth/credential-state.js', () => ({
 }))
 vi.mock('./auth/oauth-setup.js', () => ({ runOAuthSetup: vi.fn() }))
 vi.mock('./tools/registry.js', () => ({ registerTools: vi.fn() }))
-// main.ts nạp transport http bằng dynamic import; vi.mock chặn cả đường đó.
+// main.ts loads the http transport through a static import; vi.mock replaces it here.
 vi.mock('./transports/http.js', () => ({ startHttp: vi.fn() }))
+// main.ts builds the console script with hull buildCli; keep the rest of hull real.
+vi.mock('@n24q02m/hull', async (importOriginal) => ({
+  ...(await importOriginal<typeof Hull>()),
+  buildCli: vi.fn()
+}))
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   // Must be `new`-able (main.ts does `new StdioServerTransport()`) -- an
   // arrow-function mock implementation cannot be a constructor.
@@ -21,7 +30,7 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 
 import { getState, resolveCredentialState } from './auth/credential-state.js'
 import { runOAuthSetup } from './auth/oauth-setup.js'
-import { bootstrap, getTransportMode, startServer } from './main.js'
+import { bootstrap, getTransportMode, isMain, runCli, startServer } from './main.js'
 import { registerTools } from './tools/registry.js'
 import { startHttp } from './transports/http.js'
 
@@ -89,8 +98,8 @@ describe('startServer', () => {
     await startServer('http')
 
     expect(startHttp).toHaveBeenCalledOnce()
-    // Nhánh stdio mở browser để consent -- container không có browser, và ở remote
-    // thì mỗi người dùng tự consent qua /authorize. Nó phải KHÔNG chạy ở http mode.
+    // The stdio branch runs the Google consent in the browser. Over HTTP that consent is
+    // handled by the host CLI `auth` command, so it must NOT run in http mode.
     expect(runOAuthSetup).not.toHaveBeenCalled()
     expect(resolveCredentialState).not.toHaveBeenCalled()
     expect(registerTools).not.toHaveBeenCalled()
@@ -152,17 +161,89 @@ describe('bootstrap', () => {
   })
 
   it('catches a thrown error and exits the process with code 1', async () => {
-    // Một transport không dựng được (ví dụ http mode thiếu env OAuth) phải nổi lên
-    // bootstrap. Trước đây test này tựa vào throw Milestone-3 của chính main.ts;
-    // http mode đã implement nên nguồn lỗi giờ là transport, mô phỏng ở đây.
-    vi.mocked(startHttp).mockRejectedValue(new Error('GOOGLE_OAUTH_CLIENT_ID is required for http mode.'))
+    // A transport that cannot start (for example http mode without CREDENTIAL_SECRET) must
+    // surface through bootstrap. The throw is simulated here: startHttp is mocked.
+    vi.mocked(startHttp).mockRejectedValue(
+      new Error(
+        'CREDENTIAL_SECRET is required for http mode: per-user credential stores derive their encryption key from it.'
+      )
+    )
 
     await bootstrap('http')
 
     expect(errorSpy).toHaveBeenCalledWith(
       'Failed to start server:',
-      'GOOGLE_OAUTH_CLIENT_ID is required for http mode.'
+      'CREDENTIAL_SECRET is required for http mode: per-user credential stores derive their encryption key from it.'
     )
     expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+})
+
+describe('isMain', () => {
+  const originalArgv = process.argv
+  const originalPlatform = process.platform
+
+  afterEach(() => {
+    process.argv = originalArgv
+    Object.defineProperty(process, 'platform', { value: originalPlatform })
+  })
+
+  it('matches the module against its own entry path', () => {
+    process.argv = ['node', fileURLToPath(import.meta.url)]
+    expect(isMain(import.meta.url)).toBe(true)
+  })
+
+  it('compares normalized paths on win32 and rejects a different entry', () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+    process.argv = ['node', fileURLToPath(import.meta.url)]
+    expect(isMain(import.meta.url)).toBe(true)
+    process.argv = ['node', join(process.cwd(), 'package.json')]
+    expect(isMain(import.meta.url)).toBe(false)
+  })
+
+  it('returns false when the entry path cannot be resolved', () => {
+    process.argv = ['node', join(process.cwd(), 'does-not-exist.js')]
+    expect(isMain(import.meta.url)).toBe(false)
+  })
+})
+
+describe('runCli', () => {
+  it('builds the CLI, delegates serve to bootstrap, and propagates the exit code', async () => {
+    const run = vi.fn().mockResolvedValue(3)
+    vi.mocked(buildCli).mockReturnValue(run as never)
+    const originalExitCode = process.exitCode
+    const originalGuard = process.env.BETTER_WORKSPACE_MCP_BOOTSTRAPPED
+    // Pre-set the guard so serve() logs and returns without starting a real transport.
+    process.env.BETTER_WORKSPACE_MCP_BOOTSTRAPPED = 'true'
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      await runCli(['status'])
+      expect(run).toHaveBeenCalledWith(['status'])
+      expect(process.exitCode).toBe(3)
+
+      const options = vi.mocked(buildCli).mock.calls[0]?.[1] as unknown as { serve: () => Promise<void> }
+      await options.serve()
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('already running'))
+    } finally {
+      process.exitCode = originalExitCode
+      errorSpy.mockRestore()
+      if (originalGuard === undefined) delete process.env.BETTER_WORKSPACE_MCP_BOOTSTRAPPED
+      else process.env.BETTER_WORKSPACE_MCP_BOOTSTRAPPED = originalGuard
+    }
+  })
+
+  it('refuses the removed hull relay built-in with exit 2 and a pointer to auth', async () => {
+    vi.mocked(buildCli).mockReturnValue(vi.fn().mockResolvedValue(0) as never)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      await runCli(['relay'])
+      const options = vi.mocked(buildCli).mock.calls.at(-1)?.[1] as unknown as {
+        extra: { relay: () => Promise<number> }
+      }
+      expect(await options.extra.relay()).toBe(2)
+      expect(errorSpy).toHaveBeenCalledWith('relay was removed; run `workspace auth` (see README)')
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 })

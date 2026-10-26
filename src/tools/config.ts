@@ -7,7 +7,6 @@
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { startAddAccount } from '../auth/add-account.js'
-import { buildAddAccountUrl } from '../auth/add-account-remote.js'
 import { getAuth, getState, resetState, resolveCredentialState } from '../auth/credential-state.js'
 import { currentSubject } from '../auth/subject-context.js'
 import { WorkspaceMCPError, withErrorHandling } from './helpers/errors.js'
@@ -73,7 +72,7 @@ export function config(input: ConfigInput): Promise<ConfigResult> {
 
       case 'setup_start':
         return textResult(
-          'Restart the server to trigger the browser Google OAuth consent flow. Once you complete the consent screen, retry the tool.'
+          'Run `workspace auth` on the host to start the Google consent flow, then retry the tool. Stdio servers start this flow automatically on first run.'
         )
 
       case 'setup_reset':
@@ -115,30 +114,17 @@ export function config(input: ConfigInput): Promise<ConfigResult> {
       case 'account_add': {
         const makePrimary = input.value === 'primary'
 
-        // A subject scope means an authenticated remote caller: `authScope` in
-        // transports/http.ts opens one per request from the Bearer JWT, and
-        // stdio never has one. That is the exact condition this branch needs --
-        // remote add-account has to know WHOSE bucket the account joins -- so it
-        // is a better signal than sniffing MCP_TRANSPORT, which describes how the
-        // process was started rather than whether this call carries an identity.
+        // A subject scope means an authenticated HTTP caller (hull `multi` auth).
+        // Google consent is not served over HTTP, so the account is added from the host
+        // with the CLI `auth` command, which writes to the same per-user store.
         const sub = currentSubject()
         if (sub !== undefined) {
-          // No temporary server and nothing to await: the callback route already
-          // lives in this process at a fixed path, and the state in the URL
-          // carries the caller's identity to it.
-          //
-          // makePrimary is NOT honoured here and is reported rather than
-          // dropped in silence -- a caller who asked for it must not walk away
-          // believing their default changed. Why it is unavailable: the request
-          // would have to ride the signed state through the browser and Google,
-          // where anyone who obtains it could promote their own account to this
-          // user's default (see add-account-remote.ts StatePayload).
           return textResult(
             JSON.stringify({
-              open: buildAddAccountUrl(sub),
-              next: 'Complete the Google consent in the browser, then call config(action="account_list") to confirm.',
+              open: null,
+              next: `Google consent cannot be started over HTTP. On the host where this server runs, run \`workspace auth --user ${sub}\` and open the URL it prints. Then call config(action="account_list") to confirm.`,
               default_account: makePrimary
-                ? 'value="primary" is not available in remote mode and was ignored. Adding an account does not change your default; call config(action="account_set_default", account="<email>") once it appears in account_list.'
+                ? 'value="primary" is not available over HTTP and was ignored. Adding an account does not change your default; call config(action="account_set_default", account="<email>") once it appears in account_list.'
                 : 'Adding an account does not change your default. Call config(action="account_set_default", account="<email>") to change it. (If you had no accounts at all, the first one becomes the default.)'
             })
           )

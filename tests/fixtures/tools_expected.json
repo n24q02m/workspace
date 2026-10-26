@@ -1,0 +1,709 @@
+{
+  "tools": [
+    {
+      "name": "docs",
+      "description": "Google Docs operations.\n\nActions (required params -> optional):\n- getText (documentId -> tabId, limit, preview)\n- create (title -> content)\n- writeText (documentId, text -> position, tabId)\n- getSuggestions (documentId)\n- replaceText (documentId, findText, replaceText -> tabId)\n- formatText (documentId, formats -> tabId)\n\ngetText defaults to 20,000 characters, accepts limit 1-100,000, and marks truncated output explicitly. preview defaults to 2,000 characters unless limit is provided. These bounds limit response size without changing document authorization.\n\naccount = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["getText", "create", "writeText", "getSuggestions", "replaceText", "formatText"],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "documentId": {
+            "type": "string",
+            "description": "Google Doc ID or URL"
+          },
+          "title": {
+            "type": "string",
+            "description": "Document title (for create)"
+          },
+          "content": {
+            "type": "string",
+            "description": "Initial document content (for create)"
+          },
+          "text": {
+            "type": "string",
+            "description": "Text to insert (for writeText)"
+          },
+          "position": {
+            "type": "string",
+            "description": "Insert position for writeText: \"beginning\", \"end\" (default), or a positive integer index"
+          },
+          "tabId": {
+            "type": "string",
+            "description": "Tab ID to target (optional, for multi-tab documents)"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum Docs text characters for getText (1-100000; default 20000)"
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Use a 2000-character getText preview unless limit is provided"
+          },
+          "replaceText": {
+            "type": "string",
+            "description": "Replacement text (for replaceText)"
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "startIndex": {
+                  "type": "number"
+                },
+                "endIndex": {
+                  "type": "number"
+                },
+                "style": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": ["startIndex", "endIndex", "style"]
+            },
+            "description": "Formatting operations to apply (for formatText)"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Docs",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "time",
+      "description": "Local date/time/timezone helpers (no Google account needed).\n\nActions:\n- getCurrentDate\n- getCurrentTime\n- getTimeZone",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["getCurrentDate", "getCurrentTime", "getTimeZone"],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Time",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "drive",
+      "description": "Drive operations. See the action enum for operations available in this transport. account = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "findFolder",
+              "createFolder",
+              "search",
+              "trashFile",
+              "renameFile",
+              "getComments",
+              "moveFile",
+              "downloadFile"
+            ],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "fileId": {
+            "type": "string"
+          },
+          "folderId": {
+            "type": "string"
+          },
+          "folderName": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "newName": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "string"
+          },
+          "destinationFolderId": {
+            "type": "string"
+          },
+          "pageSize": {
+            "type": "number",
+            "description": "Maximum search results per page (default 10)"
+          },
+          "pageToken": {
+            "type": "string",
+            "description": "Continuation token from a previous search page"
+          },
+          "corpus": {
+            "type": "string",
+            "enum": ["user", "domain"],
+            "description": "Drive search corpus"
+          },
+          "unreadOnly": {
+            "type": "boolean",
+            "description": "Restrict search to unread files where supported"
+          },
+          "localPath": {
+            "type": "string",
+            "description": "Local destination path for downloadFile. This action is available only over local stdio transport."
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Drive",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "calendar",
+      "description": "Calendar operations. Actions: listCalendars, createEvent, listEvents, getEvent, deleteEvent, updateEvent, respondToEvent, findFreeTime. account = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "listCalendars",
+              "createEvent",
+              "listEvents",
+              "getEvent",
+              "deleteEvent",
+              "updateEvent",
+              "respondToEvent",
+              "findFreeTime"
+            ],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "calendarId": {
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "attendees": {
+            "type": "array"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Calendar",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "chat",
+      "description": "Chat operations. Actions: listSpaces, sendMessage, findSpaceByName, getMessages, sendDm, findDmByEmail, listThreads, setUpSpace. account = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "listSpaces",
+              "sendMessage",
+              "findSpaceByName",
+              "getMessages",
+              "sendDm",
+              "findDmByEmail",
+              "listThreads",
+              "setUpSpace"
+            ],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "spaceId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "pageSize": {
+            "type": "number",
+            "description": "Maximum spaces, messages, or threads per page"
+          },
+          "pageToken": {
+            "type": "string",
+            "description": "Continuation token from a previous page"
+          },
+          "unreadOnly": {
+            "type": "boolean",
+            "description": "Return only unread messages"
+          },
+          "orderBy": {
+            "type": "string",
+            "description": "Message ordering expression"
+          },
+          "filter": {
+            "type": "string",
+            "description": "Chat message filter"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Chat",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "gmail",
+      "description": "Gmail operations. Actions: search, get, downloadAttachment, modify, batchModify, modifyThread, send, createDraft, sendDraft, listLabels, createLabel. account = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "search",
+              "get",
+              "downloadAttachment",
+              "modify",
+              "batchModify",
+              "modifyThread",
+              "send",
+              "createDraft",
+              "sendDraft",
+              "listLabels",
+              "createLabel"
+            ],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "query": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "draftId": {
+            "type": "string"
+          },
+          "labelIds": {
+            "type": "array"
+          },
+          "maxResults": {
+            "type": "number",
+            "description": "Maximum messages returned per page (bounded by Gmail)"
+          },
+          "pageToken": {
+            "type": "string",
+            "description": "Continuation token from a previous search page"
+          },
+          "includeSpamTrash": {
+            "type": "boolean",
+            "description": "Include spam and trash in search results"
+          },
+          "format": {
+            "type": "string",
+            "enum": ["minimal", "full", "raw", "metadata"],
+            "description": "Message payload detail"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Gmail",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "slides",
+      "description": "Slides operations. Actions: getText, getMetadata, getImages, create, addSlide, deleteSlide, duplicateSlide, reorderSlides, getSpeakerNotes, updateSpeakerNotes, replaceAllText, insertText, deleteText, addShape, addImage, addTable, updateTextStyle, updateShapeProperties, getSlideThumbnail. account = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "getText",
+              "getMetadata",
+              "getImages",
+              "create",
+              "addSlide",
+              "deleteSlide",
+              "duplicateSlide",
+              "reorderSlides",
+              "getSpeakerNotes",
+              "updateSpeakerNotes",
+              "replaceAllText",
+              "insertText",
+              "deleteText",
+              "addShape",
+              "addImage",
+              "addTable",
+              "updateTextStyle",
+              "updateShapeProperties",
+              "getSlideThumbnail"
+            ],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "presentationId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slideId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Slides",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "sheets",
+      "description": "Sheets operations. Actions: getText, getRange, getMetadata. account = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["getText", "getRange", "getMetadata"],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "spreadsheetId": {
+            "type": "string"
+          },
+          "range": {
+            "type": "string"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Sheets",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "tasks",
+      "description": "Tasks operations. Actions: listTaskLists, listTasks, createTask, updateTask, completeTask, deleteTask. account = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["listTaskLists", "listTasks", "createTask", "updateTask", "completeTask", "deleteTask"],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "taskListId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "due": {
+            "type": "string"
+          },
+          "maxResults": {
+            "type": "number",
+            "description": "Maximum task lists or tasks per page"
+          },
+          "pageToken": {
+            "type": "string",
+            "description": "Continuation token from a previous page"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Tasks",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "people",
+      "description": "People operations. Actions: getUserProfile, getMe, getUserRelations. account = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["getUserProfile", "getMe", "getUserRelations"],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "resourceName": {
+            "type": "string"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "People",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "forms",
+      "description": "Google Forms operations.\n\nActions (required params -> optional):\n- create (title -> documentTitle)\n- get (formId)\n- batchUpdate (formId, requests)\n- listResponses (formId -> pageSize, pageToken, filter)\n- getResponse (formId, responseId)\n\nQuestions are added with batchUpdate, not create. Responses are read-only (the Forms API cannot write one), and listing or deleting forms goes through the drive tool.\n\naccount = email of the Google account to use (default: primary).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["create", "get", "batchUpdate", "listResponses", "getResponse"],
+            "description": "Action to perform"
+          },
+          "account": {
+            "type": "string",
+            "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
+          },
+          "formId": {
+            "type": "string",
+            "description": "Form ID, or the editor URL https://docs.google.com/forms/d/<formId>/edit"
+          },
+          "title": {
+            "type": "string",
+            "description": "Form title shown to respondents (for create)"
+          },
+          "documentTitle": {
+            "type": "string",
+            "description": "Drive file name, when it should differ from the title (for create)"
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Forms API batchUpdate requests, e.g. [{\"createItem\": {...}}] (for batchUpdate)"
+          },
+          "responseId": {
+            "type": "string",
+            "description": "Response ID (for getResponse)"
+          },
+          "pageSize": {
+            "type": "number",
+            "description": "Maximum responses to return (for listResponses)"
+          },
+          "pageToken": {
+            "type": "string",
+            "description": "Page token from a previous listResponses call"
+          },
+          "filter": {
+            "type": "string",
+            "description": "Response filter, e.g. timestamp > 2026-01-01T00:00:00Z (for listResponses)"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Forms",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "config",
+      "description": "Manage server configuration, credential state, and the Google accounts this server can act as.\n\nActions:\n- status: current credential state plus the configured accounts and which is primary\n- setup_start: instructions to configure the Google account via browser OAuth (HTTP: run `workspace auth --user <namespace>` on the host)\n- setup_reset: clear credentials, return to awaiting_setup\n- setup_complete: re-check credentials after external config changes\n- set: update a runtime setting (M1 has no mutable settings; returns info)\n- cache_clear: clear any cached state (no-op in M1)\n- account_add: start the browser consent flow for one more account (stdio: returns a URL to open; HTTP: returns the `workspace auth --user <namespace>` command to run on the host)\n- account_list: list configured accounts and the primary one\n- account_remove (account): forget one account; a remaining account is promoted if it was primary\n- account_set_default (account): make one account the primary (used when a call omits account)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "setup_start",
+              "setup_reset",
+              "setup_complete",
+              "set",
+              "cache_clear",
+              "account_add",
+              "account_list",
+              "account_remove",
+              "account_set_default"
+            ],
+            "description": "Action to perform"
+          },
+          "key": {
+            "type": "string",
+            "description": "Setting key (for set action)"
+          },
+          "value": {
+            "type": "string",
+            "description": "Setting value (for set action)"
+          },
+          "account": {
+            "type": "string",
+            "description": "Account email (for account_remove / account_set_default / account_add)"
+          }
+        },
+        "required": ["action"]
+      },
+      "annotations": {
+        "title": "Config",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "help",
+      "description": "Get full documentation for a topic. Use when compressed tool descriptions are insufficient.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "enum": [
+              "docs",
+              "time",
+              "drive",
+              "calendar",
+              "chat",
+              "gmail",
+              "slides",
+              "sheets",
+              "tasks",
+              "people",
+              "forms",
+              "config",
+              "overview"
+            ],
+            "description": "Topic to get documentation for"
+          }
+        },
+        "required": ["topic"]
+      },
+      "annotations": {
+        "title": "Help",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    }
+  ]
+}

@@ -15,7 +15,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema
 } from '@modelcontextprotocol/sdk/types.js'
-import { getState } from '../auth/credential-state.js'
+import { getState, resolveCredentialState } from '../auth/credential-state.js'
 import { config } from './config.js'
 import type { DomainRunInput } from './domains/factory.js'
 import { DOMAINS, type DomainDef } from './domains/index.js'
@@ -109,7 +109,7 @@ const INFRA_TOOLS = [
   {
     name: 'config',
     description:
-      'Manage server configuration, credential state, and the Google accounts this server can act as.\n\nActions:\n- status: current credential state plus the configured accounts and which is primary\n- setup_start: instructions to configure the Google account via browser OAuth\n- setup_reset: clear credentials, return to awaiting_setup\n- setup_complete: re-check credentials after external config changes\n- set: update a runtime setting (M1 has no mutable settings; returns info)\n- cache_clear: clear any cached state (no-op in M1)\n- account_add: start the browser consent flow for one more account (returns a URL to open)\n- account_list: list configured accounts and the primary one\n- account_remove (account): forget one account; a remaining account is promoted if it was primary\n- account_set_default (account): make one account the primary (used when a call omits account)',
+      'Manage server configuration, credential state, and the Google accounts this server can act as.\n\nActions:\n- status: current credential state plus the configured accounts and which is primary\n- setup_start: instructions to configure the Google account via browser OAuth (HTTP: run `workspace auth --user <namespace>` on the host)\n- setup_reset: clear credentials, return to awaiting_setup\n- setup_complete: re-check credentials after external config changes\n- set: update a runtime setting (M1 has no mutable settings; returns info)\n- cache_clear: clear any cached state (no-op in M1)\n- account_add: start the browser consent flow for one more account (stdio: returns a URL to open; HTTP: returns the `workspace auth --user <namespace>` command to run on the host)\n- account_list: list configured accounts and the primary one\n- account_remove (account): forget one account; a remaining account is promoted if it was primary\n- account_set_default (account): make one account the primary (used when a call omits account)',
     annotations: {
       title: 'Config',
       readOnlyHint: false,
@@ -242,12 +242,18 @@ export function registerTools(
     // Credential guard. config and help work without a configured Google
     // account; every domain tool (docs, and the 9 more Task 7 appends)
     // requires the OAuth flow to have completed at least once.
+    // The state map is per process and per bucket. A fresh process (or a new HTTP user)
+    // starts empty, so re-resolve from the store before refusing. resolveCredentialState
+    // fails closed: a store read error leaves the state at 'awaiting_setup'.
+    if (!TOKEN_FREE_TOOLS.has(name) && getState() !== 'configured') {
+      await resolveCredentialState()
+    }
     if (!TOKEN_FREE_TOOLS.has(name) && getState() !== 'configured') {
       return {
         content: [
           {
             type: 'text',
-            text: 'Google account not configured. Restart the server to complete the browser OAuth consent flow, or call config(action="setup_start") for instructions.'
+            text: 'Google account not configured. Run `workspace auth` on the host to complete the Google consent, or call config(action="setup_start") for instructions.'
           }
         ],
         isError: true

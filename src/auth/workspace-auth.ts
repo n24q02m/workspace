@@ -143,7 +143,7 @@ export class WorkspaceAuth {
       throw new Error(`Account ${account.trim().toLowerCase()} is not configured.${known}`)
     }
     throw new Error(
-      'Google account not configured. Start the server once to complete the browser OAuth consent (see setup docs).'
+      'Google account not configured. Run `workspace auth` on the host to complete the Google consent (see setup docs).'
     )
   }
 }

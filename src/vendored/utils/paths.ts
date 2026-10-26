@@ -1,7 +1,7 @@
 // Shim (ours) for upstream utils/paths — decoupled from gemini-cli.
 // Upstream walked the FS for a `gemini-extension.json` marker (thrown if
 // missing) and defined its OWN encrypted-token paths; we authenticate via
-// mcp-core PerPluginStore, so those are unused and dropped here (YAGNI).
+// hull PerPluginStore, so those are unused and dropped here (YAGNI).
 // PROJECT_ROOT is only a base for the optional debug log file (see logger.ts).
 import path from 'node:path'
 import fs from 'node:fs'

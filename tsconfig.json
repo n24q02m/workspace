@@ -6,7 +6,7 @@
     "sourceMap": true,
     "outDir": "./build",
     "target": "es2021",
-    "lib": ["es2022"],
+    "lib": ["es2022", "es2024.promise"],
     "jsx": "react-jsx",
     "module": "es2022",
     "moduleResolution": "Bundler",

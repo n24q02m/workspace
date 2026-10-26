@@ -18,7 +18,7 @@ async function build() {
     banner: {
       js: "#!/usr/bin/env node\nimport { createRequire } from 'module';const require = createRequire(import.meta.url);"
     },
-    external: ['util', 'googleapis', 'google-auth-library', '@modelcontextprotocol/sdk', '@n24q02m/mcp-core', 'zod']
+    external: ['util', 'googleapis', 'google-auth-library', '@modelcontextprotocol/sdk', '@n24q02m/hull', 'zod']
   })
 
   // Make the output file executable

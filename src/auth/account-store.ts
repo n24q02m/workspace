@@ -1,12 +1,12 @@
 /**
  * Nhiều Google account trong MỘT blob mã hoá.
  *
- * PerPluginStore chỉ có đúng một credKey cho mỗi (plugin, sub) — xem
- * per-plugin-store.ts:74-82 — nên layout "một key mỗi account" mà spec §4.2
+ * PerPluginStore (`@n24q02m/hull/storage`) chỉ có đúng một credKey cho mỗi
+ * (plugin, sub) — nên layout "một key mỗi account" mà spec §4.2
  * mô tả không dùng được. Gộp vào một blob cũng khiến mỗi lần ghi là atomic:
  * `accounts` và `primary` không bao giờ lệch nhau.
  */
-import { PerPluginStore } from '@n24q02m/mcp-core/storage'
+import { PerPluginStore } from '@n24q02m/hull/storage'
 import { STORE_PLUGIN } from '../constants.js'
 
 export interface AccountRecord {
@@ -55,12 +55,12 @@ export class AccountStore {
   private store: PerPluginStore
 
   /**
-   * `sub` = JWT subject của người dùng (chế độ HTTP multi-user). Không truyền =
+   * `sub` = namespace của người dùng (chế độ HTTP multi-user). Không truyền =
    * `null` = một bucket duy nhất, đúng cho stdio single-user.
    *
    * PerPluginStore đổi credKey theo sub: `better-workspace/subs/<sub>/config` so
-   * với `better-workspace/config` (per-plugin-store.ts:80), và khoá mã hoá cũng
-   * derive theo sub (`deriveMultiUserKey` vs `loadOrGenMachineKey`, :85). Nên hai
+   * với `better-workspace/config`, và khoá mã hoá cũng được derive theo sub
+   * (khoá theo user thay cho khoá máy). Nên hai
    * sub khác nhau không đọc được blob của nhau kể cả khi chạm được cùng backend.
    *
    * Nhánh sub cần env `CREDENTIAL_SECRET`; thiếu nó thì lần đọc/ghi đầu tiên ném.
