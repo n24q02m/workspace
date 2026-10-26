@@ -68,7 +68,7 @@
 ## Install
 
 The server runs in two modes: **stdio** (default, single-user, one Google OAuth
-client of your own) and **HTTP** (multi-user, OAuth 2.1 delegated to Google). For
+client of your own) and **HTTP** (multi-user, per-user bearer tokens). For
 stdio, add it to your MCP client config:
 
 ```jsonc
@@ -100,7 +100,8 @@ not on a public URL. Enable the Workspace APIs you plan to call on the same
 project, and add yourself as a test user while the consent screen is unpublished.
 
 The first run opens the Google consent screen in your browser; the refresh token
-is stored encrypted on your machine, so later runs start without asking again.
+is stored encrypted on your machine under `~/.better-workspace/` (a legacy
+`~/.better-workspace-mcp/` is read as a fallback), so later runs start without asking again.
 
 The same server can also serve several people over HTTP -- see
 [Remote (HTTP mode)](#remote-http-mode).
@@ -112,10 +113,11 @@ The same server can also serve several people over HTTP -- see
 
 ## Remote (HTTP mode)
 
-Besides stdio, the server runs as a multi-user HTTP service. Authentication is
-OAuth 2.1 delegated to Google, and each user's Google credentials are kept in
-their own bucket keyed by their JWT `sub`, so one deployment serves several
-people without them sharing an account.
+Besides stdio, the server runs as a multi-user HTTP service. Each request carries a
+bearer token from a users file (`WORKSPACE_USERS_FILE`), and each user's Google
+credentials are kept in their own bucket, keyed by that user's namespace, so one
+deployment serves several people without them sharing an account. Google consent for
+an HTTP account runs on the host, with `workspace auth --user <namespace>`.
 
 Point your MCP client at the host you deployed it on:
 
@@ -138,31 +140,17 @@ transport directly, with no HTTP hop inside it.
 | Mode | Selected by | Serves | Google OAuth client |
 | --- | --- | --- | --- |
 | `stdio` | the default | one user, on their own machine | **Desktop app** |
-| `http` | `--http`, `MCP_TRANSPORT=http`, or `TRANSPORT_MODE=http` | several users, one credential bucket per JWT `sub` | **Web application** |
+| `http` | `--http`, `MCP_TRANSPORT=http`, or `TRANSPORT_MODE=http` | several users, one credential bucket per user namespace | **Web application** |
 
 ### Two OAuth clients, not one
 
 Google binds redirect URIs to the *type* of the OAuth client, so the two modes
-cannot share one:
-
-- A **Desktop** client may redirect to any loopback port. That is what stdio
-  needs -- it stands a throwaway consent server on a random port.
-- A **Web** client may only redirect to URIs registered in advance. That is what
-  a deployment needs, because a public host has no loopback to come back to.
-
-Register both of these on the Web client, or the flows that use them fail with
-`redirect_uri_mismatch`:
-
-| Redirect URI | Used by |
-| --- | --- |
-| `<PUBLIC_URL>/callback` | signing in to the server itself (delegated OAuth) |
-| `<PUBLIC_URL>/accounts/callback` | `config(action="account_add")` -- adding a second Google account |
-
-Keep the two client credentials under separate names. Pointing
-`GOOGLE_OAUTH_CLIENT_ID`/`_SECRET` at the Web client on a machine that also runs
-stdio breaks every stdio install, which is why `docker-compose.http.yml` reads the
-Web pair as `GOOGLE_OAUTH_WEB_CLIENT_ID`/`_SECRET` and renames it on the way into
-the container.
+cannot share one. stdio uses a **Desktop** client, which may redirect to any
+loopback port. HTTP uses a **Web** client. Keep the two credentials under separate
+names: pointing `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET` at the Web client on a machine
+that also runs stdio breaks every stdio install. That is why
+`docker-compose.http.yml` reads the Web pair as `GOOGLE_OAUTH_WEB_CLIENT_ID`/`_SECRET`
+and renames it on the way into the container.
 
 ### Environment
 
@@ -170,13 +158,12 @@ the container.
 | --- | --- | --- |
 | `GOOGLE_OAUTH_CLIENT_ID` | yes | Web client id. The server refuses to start without it. |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | yes | Web client secret. Same. |
-| `CREDENTIAL_SECRET` | yes | Derives each subject's credential-encryption key, and the JWT signing key. Without it that signing key would land on a container filesystem that does not survive a restart, so the server refuses to start rather than lose everyone's session on the next deploy. |
-| `PUBLIC_URL` | in practice | The exact public origin, e.g. `https://<your-host>`. It is what the redirect URIs above are built from; unset, the server falls back to the `Host` header and the redirect stops matching what Google has registered. |
-| `MCP_RELAY_PASSWORD` | recommended | One shared password gating `/authorize` behind a login page. Empty disables the gate, which leaves anyone who can reach the host able to start an OAuth flow against your deployment. |
+| `CREDENTIAL_SECRET` | yes | Derives the encryption key of each user's credential store. The server refuses to start without it, rather than fail in the middle of a user's consent. |
+| `WORKSPACE_USERS_FILE` | yes in HTTP | Users file that maps each bearer token to a user namespace (hull `multi` auth). Unset uses hull's default location. |
 | `PORT` | no | Listen port. `0` (the default) asks the OS for a free one. |
 | `HOST` | no | Bind address. Defaults to loopback, so a container needs `0.0.0.0`. |
 
-Credentials are stored on local disk, under the data volume.
+Credentials are stored on local disk under `~/.better-workspace/`, which is the data volume in the container. A legacy `~/.better-workspace-mcp/` is read as a fallback.
 
 `docker-compose.http.yml` in this repo is these variables written out as a
 runnable overlay.
@@ -249,7 +236,7 @@ Accounts are managed through the `config` tool:
 
 | Call | Effect |
 | --- | --- |
-| `config(action="account_add")` | Returns a URL to open; completing the Google consent there adds one more account. |
+| `config(action="account_add")` | In stdio, returns a URL to open; completing the Google consent there adds one more account. Over HTTP it returns the `workspace auth --user <namespace>` command to run on the host. |
 | `config(action="account_list")` | The configured accounts and which one is primary. |
 | `config(action="account_remove", account="<email>")` | Forget one account. |
 | `config(action="account_set_default", account="<email>")` | Make one account the primary. |
@@ -260,15 +247,12 @@ awaiting setup. Naming an account that is not configured is an error that names
 it -- the call is never rerouted to the primary, because a silent fallback would
 act on the wrong mailbox.
 
-`account_add` works in both transports and chooses the flow itself: a temporary
-loopback consent server in stdio, and a fixed `/accounts/callback` on the running
-server over HTTP, since a Web OAuth client's redirect URI must be registered in
-advance. The HTTP link is single-use and expires in 10 minutes.
+`account_add` chooses its flow by transport. In stdio it starts a temporary loopback
+consent server and returns the URL. Over HTTP it does not serve consent; it returns
+the `workspace auth --user <namespace>` command for the host.
 
-`value="primary"` is stdio only. Over HTTP that request would have to ride the
-URL through Google, where anyone who obtained it could aim your default account
-at one of theirs -- so remote callers change the default with
-`account_set_default` instead, from inside an authenticated call.
+`value="primary"` is stdio only; remote callers change the default with
+`account_set_default`.
 
 ### Coming from an earlier single-account build
 
@@ -322,8 +306,8 @@ replaced in place, so nothing else changes.
 Full docs at **[mcp.n24q02m.com/servers/better-workspace-mcp/](https://mcp.n24q02m.com/servers/better-workspace-mcp/)**:
 
 - [Setup](https://mcp.n24q02m.com/servers/better-workspace-mcp/setup/) -- plugin install, Docker stdio, and Docker HTTP methods
-- [Modes overview](https://mcp.n24q02m.com/get-started/modes-overview/) -- stdio (default) and HTTP (multi-user, OAuth 2.1)
-- [Multi-user setup](https://mcp.n24q02m.com/get-started/multi-user/) -- the per-JWT-`sub` credential model behind [Remote (HTTP mode)](#remote-http-mode)
+- [Modes overview](https://mcp.n24q02m.com/get-started/modes-overview/) -- stdio (default) and HTTP (multi-user, bearer tokens)
+- [Multi-user setup](https://mcp.n24q02m.com/get-started/multi-user/) -- the per-namespace credential model behind [Remote (HTTP mode)](#remote-http-mode)
 
 Every tool also documents itself at runtime: call `help` for the full reference on
 any of them, including the exact parameters each action takes.
@@ -340,12 +324,12 @@ docker compose -f docker-compose.yml -f docker-compose.http.yml up
 ```
 
 It builds the `http` image locally and publishes it on host loopback only, at
-`http://localhost:8087`. Supply `GOOGLE_OAUTH_WEB_CLIENT_ID`,
-`GOOGLE_OAUTH_WEB_CLIENT_SECRET`, `CREDENTIAL_SECRET`, `PUBLIC_URL`, and
-`MCP_RELAY_PASSWORD` through your shell or an `.env` file (see
-[Environment](#environment)). For use beyond the local machine, put your own
-TLS reverse proxy on the same host in front of it and set `PUBLIC_URL` to that
-proxy's origin.
+`GOOGLE_OAUTH_WEB_CLIENT_ID`, `GOOGLE_OAUTH_WEB_CLIENT_SECRET`,
+`CREDENTIAL_SECRET`, and `WORKSPACE_USERS_FILE` through your shell or an
+`.env` file (see [Environment](#environment)). The users file maps each
+bearer token to a user namespace; accounts are added on the host with
+`workspace auth --user <namespace>`. For use beyond the local machine, put
+your own TLS reverse proxy on the same host in front of it.
 
 Each release also publishes multi-arch container images to Docker Hub and
 GHCR; their default stage is the `http` server.

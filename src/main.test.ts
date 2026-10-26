@@ -9,7 +9,7 @@ vi.mock('./auth/credential-state.js', () => ({
 }))
 vi.mock('./auth/oauth-setup.js', () => ({ runOAuthSetup: vi.fn() }))
 vi.mock('./tools/registry.js', () => ({ registerTools: vi.fn() }))
-// main.ts nạp transport http bằng dynamic import; vi.mock chặn cả đường đó.
+// main.ts loads the http transport through a static import; vi.mock replaces it here.
 vi.mock('./transports/http.js', () => ({ startHttp: vi.fn() }))
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   // Must be `new`-able (main.ts does `new StdioServerTransport()`) -- an
@@ -89,8 +89,8 @@ describe('startServer', () => {
     await startServer('http')
 
     expect(startHttp).toHaveBeenCalledOnce()
-    // Nhánh stdio mở browser để consent -- container không có browser, và ở remote
-    // thì mỗi người dùng tự consent qua /authorize. Nó phải KHÔNG chạy ở http mode.
+    // The stdio branch runs the Google consent in the browser. Over HTTP that consent is
+    // handled by the host CLI `auth` command, so it must NOT run in http mode.
     expect(runOAuthSetup).not.toHaveBeenCalled()
     expect(resolveCredentialState).not.toHaveBeenCalled()
     expect(registerTools).not.toHaveBeenCalled()
@@ -152,16 +152,19 @@ describe('bootstrap', () => {
   })
 
   it('catches a thrown error and exits the process with code 1', async () => {
-    // Một transport không dựng được (ví dụ http mode thiếu env OAuth) phải nổi lên
-    // bootstrap. Trước đây test này tựa vào throw Milestone-3 của chính main.ts;
-    // http mode đã implement nên nguồn lỗi giờ là transport, mô phỏng ở đây.
-    vi.mocked(startHttp).mockRejectedValue(new Error('GOOGLE_OAUTH_CLIENT_ID is required for http mode.'))
+    // A transport that cannot start (for example http mode without CREDENTIAL_SECRET) must
+    // surface through bootstrap. The throw is simulated here: startHttp is mocked.
+    vi.mocked(startHttp).mockRejectedValue(
+      new Error(
+        'CREDENTIAL_SECRET is required for http mode: per-user credential stores derive their encryption key from it.'
+      )
+    )
 
     await bootstrap('http')
 
     expect(errorSpy).toHaveBeenCalledWith(
       'Failed to start server:',
-      'GOOGLE_OAUTH_CLIENT_ID is required for http mode.'
+      'CREDENTIAL_SECRET is required for http mode: per-user credential stores derive their encryption key from it.'
     )
     expect(exitSpy).toHaveBeenCalledWith(1)
   })

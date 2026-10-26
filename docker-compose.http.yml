@@ -8,30 +8,19 @@ services:
       - MCP_TRANSPORT=http
       # The WEB OAuth client, renamed on the way in: Google binds redirect URIs
       # to the client TYPE, so http needs a Web client while stdio needs a
-      # Desktop one. Keeping the two
-      # under distinct names is what stops an http deploy from overwriting the
-      # credentials every stdio install runs on.
-      #
-      # Register BOTH redirect URIs on that Web client, or the flow that uses the
-      # missing one fails at Google with redirect_uri_mismatch:
-      #   ${PUBLIC_URL}/callback           - signing in to this server
-      #   ${PUBLIC_URL}/accounts/callback  - config(action="account_add")
+      # Desktop one. Keeping the two under distinct names is what stops an http
+      # deploy from overwriting the credentials every stdio install runs on.
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_WEB_CLIENT_ID}
       - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_WEB_CLIENT_SECRET}
-      # Refused at startup if unset: per-subject credential buckets derive their
-      # encryption key from it, and mcp-core's JWT signing key derives from it
-      # rather than landing on the container filesystem, which does not survive a
-      # recreate.
+      # Refused at startup if unset: per-user credential stores derive their
+      # encryption key from it.
       - CREDENTIAL_SECRET=${CREDENTIAL_SECRET}
-      # The exact public origin. Unset, mcp-core falls back to the Host header,
-      # which yields redirect URIs that no registered one matches.
-      - PUBLIC_URL=${PUBLIC_URL}
-      # Gate A. Empty DISABLES the gate, leaving /authorize open to anyone who can
-      # reach the port - so this is not an optional convenience on a published
-      # host.
-      - MCP_RELAY_PASSWORD=${MCP_RELAY_PASSWORD}
-      # mcp-core binds loopback by default, which is unreachable from outside the
-      # container.
+      # Users file for the per-user bearer table (hull `multi` auth). Must be a
+      # path inside the container; mount the file in yourself. Unset falls back to
+      # hull's default location.
+      - WORKSPACE_USERS_FILE=${WORKSPACE_USERS_FILE}
+      # The server binds loopback by default, which is unreachable from outside
+      # the container.
       - HOST=0.0.0.0
       - PORT=8080
     # Next free port in the stack (notion+telegram 8081, email 8082, imagine 8084,

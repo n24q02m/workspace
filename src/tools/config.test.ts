@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import { setHomeDirForTesting } from '@n24q02m/mcp-core/storage'
+import { setHomeDirForTesting } from '@n24q02m/hull/storage'
+import { localAuthContext, runWithAuthContext } from '@n24q02m/hull/token-auth'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getAuth, resetState, resolveCredentialState } from '../auth/credential-state.js'
 import { config } from './config.js'
@@ -14,6 +15,20 @@ function textOf(result: CallToolResult): string {
   const first = result.content[0]
   return 'text' in first ? first.text : ''
 }
+
+// add-account.js is mocked: the real flow binds a local HTTP port. Each call is
+// recorded so tests can assert the stdio-only contract.
+const addAccountCalls = vi.hoisted(() => [] as Array<{ makePrimary?: boolean }>)
+vi.mock('../auth/add-account.js', () => ({
+  startAddAccount: async (opts: { makePrimary?: boolean }) => {
+    addAccountCalls.push(opts)
+    return { url: 'http://127.0.0.1:9999/', done: Promise.resolve('x@example.com') }
+  }
+}))
+
+// Bind `sub` as the hull caller namespace for `fn`; currentSubject() reads it back.
+const asSub = <T>(sub: string, fn: () => Promise<T>): Promise<T> =>
+  runWithAuthContext({ ...localAuthContext(), uid: sub, namespace: sub, mode: 'multi' }, fn)
 
 // The real credential-state module (not a mock): every account action here has to
 // land on the actual store to prove anything, and PerPluginStore honors
@@ -64,11 +79,10 @@ describe('config', () => {
   })
 
   describe('setup_start action', () => {
-    it('returns browser OAuth restart instructions', async () => {
+    it('tells the user to run workspace auth on the host', async () => {
       const result = await config({ action: 'setup_start' })
 
-      expect(textOf(result)).toContain('OAuth')
-      expect(textOf(result)).toContain('Restart the server')
+      expect(textOf(result)).toContain('workspace auth')
     })
   })
 
@@ -182,85 +196,40 @@ describe('config', () => {
       })
     })
 
-    // add-account.js is mocked here: the real flow binds a local HTTP port, and the
+    // add-account.js is mocked: the real flow binds a local HTTP port, and the
     // point of this test is the non-blocking contract (URL back now, consent later).
     it('account_add returns a URL to open without blocking on the consent', async () => {
-      const seenOpts: Array<{ makePrimary?: boolean }> = []
-      vi.resetModules()
-      vi.doMock('../auth/add-account.js', () => ({
-        startAddAccount: async (opts: { makePrimary?: boolean }) => {
-          seenOpts.push(opts)
-          return { url: 'http://127.0.0.1:9999/', done: Promise.resolve('x@example.com') }
-        }
-      }))
-      try {
-        const { config: freshConfig } = await import('./config.js')
+      addAccountCalls.length = 0
+      const body = JSON.parse(textOf(await config({ action: 'account_add' }))) as { open: string }
+      expect(body.open).toBe('http://127.0.0.1:9999/')
 
-        const body = JSON.parse(textOf(await freshConfig({ action: 'account_add' }))) as { open: string }
-        expect(body.open).toBe('http://127.0.0.1:9999/')
-
-        // value="primary" is how a caller asks for the new account to become default.
-        await freshConfig({ action: 'account_add', value: 'primary' })
-        expect(seenOpts).toEqual([{ makePrimary: false }, { makePrimary: true }])
-      } finally {
-        vi.doUnmock('../auth/add-account.js')
-        vi.resetModules()
-      }
+      // value="primary" is how a caller asks for the new account to become default.
+      await config({ action: 'account_add', value: 'primary' })
+      expect(addAccountCalls).toEqual([{ makePrimary: false }, { makePrimary: true }])
     })
 
-    // Remote: a subject scope exists, so account_add must NOT stand up a local
-    // consent server -- it returns the fixed /accounts/callback URL carrying the
-    // caller's identity in a signed state.
-    it('account_add inside a subject scope uses the remote callback, not a local port', async () => {
-      process.env.CREDENTIAL_SECRET = 'test-secret-at-least-32-chars-long-xx'
-      process.env.PUBLIC_URL = 'https://workspace.example.com'
-      vi.resetModules()
-      let localFlowStarted = false
-      vi.doMock('../auth/add-account.js', () => ({
-        startAddAccount: async () => {
-          localFlowStarted = true
-          return { url: 'http://127.0.0.1:9999/', done: Promise.resolve('x@example.com') }
-        }
-      }))
-      try {
-        const { config: freshConfig } = await import('./config.js')
-        const { runWithSubject } = await import('../auth/subject-context.js')
-        const { verifyState } = await import('../auth/add-account-remote.js')
+    // Subject scope (HTTP): account_add must NOT start a local consent flow. It
+    // returns no URL and tells the caller to run `workspace auth --user <sub>` on the host.
+    it('account_add inside a subject scope returns the host command instead of a local flow', async () => {
+      addAccountCalls.length = 0
+      const body = (await asSub('sub-alice', async () =>
+        JSON.parse(textOf(await config({ action: 'account_add', value: 'primary' })))
+      )) as { open: null; next: string; default_account: string }
 
-        const body = (await runWithSubject('sub-alice', async () =>
-          JSON.parse(textOf(await freshConfig({ action: 'account_add', value: 'primary' })))
-        )) as { open: string; default_account: string }
-
-        expect(localFlowStarted).toBe(false)
-        const url = new URL(body.open)
-        expect(url.searchParams.get('redirect_uri')).toBe('https://workspace.example.com/accounts/callback')
-        // The bucket the account will join is the CALLER's, carried in the state.
-        const state = verifyState(url.searchParams.get('state') ?? '')
-        expect(state?.sub).toBe('sub-alice')
-        // value="primary" is refused remotely, and the caller is TOLD so rather
-        // than left believing their default changed.
-        expect(state).not.toHaveProperty('mp')
-        expect(body.default_account).toMatch(/not available in remote mode/)
-        expect(body.default_account).toMatch(/account_set_default/)
-      } finally {
-        vi.doUnmock('../auth/add-account.js')
-        vi.resetModules()
-      }
+      expect(addAccountCalls).toEqual([])
+      expect(body.open).toBeNull()
+      expect(body.next).toMatch(/workspace auth --user sub-alice/)
+      // value="primary" cannot be honoured over HTTP, and the caller is TOLD so
+      // rather than left believing their default changed.
+      expect(body.default_account).toMatch(/not available over HTTP/)
+      expect(body.default_account).toMatch(/account_set_default/)
     })
 
     it('tells a remote caller how to change the default when they did not ask to', async () => {
-      process.env.CREDENTIAL_SECRET = 'test-secret-at-least-32-chars-long-xx'
-      process.env.PUBLIC_URL = 'https://workspace.example.com'
-      // config and subject-context MUST come from the same module instance --
-      // a sibling test calls vi.resetModules(), and a fresh subject-context
-      // carries its own AsyncLocalStorage, so a mismatched pair leaves
-      // currentSubject() undefined and silently takes the stdio branch.
-      vi.resetModules()
-      const { config: freshConfig } = await import('./config.js')
-      const { runWithSubject } = await import('../auth/subject-context.js')
-
-      const body = (await runWithSubject('sub-alice', async () =>
-        JSON.parse(textOf(await freshConfig({ action: 'account_add' })))
+      // config and subject-context MUST see the same hull module instance; the
+      // static imports at the top of this file guarantee that.
+      const body = (await asSub('sub-alice', async () =>
+        JSON.parse(textOf(await config({ action: 'account_add' })))
       )) as { default_account: string }
 
       expect(body.default_account).toMatch(/does not change your default/)

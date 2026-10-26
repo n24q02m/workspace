@@ -1,23 +1,16 @@
 /**
- * JWT `sub` của request hiện tại (chế độ HTTP remote).
+ * Storage subject of the current request: the hull `namespace` of the authenticated caller.
  *
- * Lồng NGOÀI account-context: một tool call chạy trong hai lớp — sub (người
- * dùng nào, lấy từ Bearer JWT trong authScope) rồi account (Google account nào
- * của người đó, lấy từ tham số tool). Hai trục độc lập nên phải là hai storage
- * riêng, không gộp thành một object.
+ * Layering: hull's HTTP guard binds the caller (`AuthContext`) for each request; tools
+ * read it here and scope credential storage by `namespace`. The Google account a tool
+ * uses is a second, independent axis, chosen by the tool argument (account-context.ts).
  *
- * mcp-core KHÔNG export sẵn subject context: doc của `RunHttpServerOptions.authScope`
- * (`transport/local-server.ts:96-102`) nói rõ consumer tự wrap request trong
- * AsyncLocalStorage. Đây là chỗ làm việc đó.
+ * `undefined` means "no subject": stdio and loopback no-auth both resolve to
+ * `mode: 'no-auth'`, which maps to the single-user layout in PerPluginStore (sub = null).
  */
-import { AsyncLocalStorage } from 'node:async_hooks'
-
-const storage = new AsyncLocalStorage<{ sub: string }>()
-
-export function runWithSubject<T>(sub: string, fn: () => Promise<T>): Promise<T> {
-  return storage.run({ sub }, fn)
-}
+import { currentUser } from '@n24q02m/hull/token-auth'
 
 export function currentSubject(): string | undefined {
-  return storage.getStore()?.sub
+  const user = currentUser()
+  return user.mode === 'no-auth' ? undefined : user.namespace
 }

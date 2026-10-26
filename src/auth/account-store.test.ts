@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { PerPluginStore, setHomeDirForTesting } from '@n24q02m/mcp-core/storage'
+import { PerPluginStore, setHomeDirForTesting } from '@n24q02m/hull/storage'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { STORE_PLUGIN } from '../constants.js'
 import { AccountStore, emailFromIdToken, isLegacyBlob, UNIDENTIFIED_ACCOUNT } from './account-store.js'
@@ -302,7 +302,7 @@ describe('AccountStore', () => {
     })
 
     it('rejects a sub that would escape the per-subject directory', async () => {
-      // credPath() của mcp-core validate sub (per-plugin-store.ts:34-40) và ném
+      // credPath() của hull validate sub (per-plugin-store.ts:34-40) và ném
       // ngay trong constructor. Ghi lại ở đây vì `getAuth()` dựng AccountStore từ
       // một giá trị lấy từ JWT: đường ném đó là đường bảo vệ, không phải tai nạn.
       expect(() => new AccountStore('../escape')).toThrow(/Invalid sub/i)

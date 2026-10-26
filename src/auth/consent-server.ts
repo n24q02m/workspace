@@ -8,7 +8,7 @@
  */
 import { SERVER_NAME } from '../constants.js'
 
-/** The only part of mcp-core's HttpServerHandle this module needs. */
+/** The only part of the loopback consent server this module needs. */
 interface ClosableServer {
   close: () => Promise<void>
 }
@@ -17,13 +17,10 @@ interface ClosableServer {
  * How long the temporary server outlives a SUCCESSFUL consent.
  *
  * A second consent tab is ordinary. The user clicks the URL twice, the browser prefetches
- * it, they reload the finished page -- and during first-run setup mcp-core auto-opens one
- * itself while the URL printed to stderr offers another. Each tab runs its own PKCE
- * handshake and comes back to `/callback` with its own code (mcp-core keys pending sessions
- * on a per-tab nonce, so a late one is still valid), so closing the moment the FIRST tab
- * succeeds drops the second onto a dead port. Seen in the field: one tab on "Setup
- * complete", the other ERR_CONNECTION_REFUSED at 127.0.0.1:<port>/callback -- an error page
- * for a consent that actually worked.
+ * it, or they reload the finished page. Each tab exchanges its own code at `/callback`, so
+ * closing the moment the FIRST tab succeeds drops a second tab onto a dead port. Seen in the
+ * field: one tab on "Setup complete", the other ERR_CONNECTION_REFUSED at
+ * 127.0.0.1:<port>/callback -- an error page for a consent that actually worked.
  *
  * Ten seconds is a round number, not a measured one. It covers the mechanical duplicates
  * above, which are all sub-second; it does not pretend to cover someone who finishes a
@@ -32,7 +29,7 @@ interface ClosableServer {
  * consent.
  *
  * What a late tab may DO is the other half of this, and it stays in each flow's
- * `onTokenReceived`: the first consent writes, a later one for the same account is accepted
+ * `onTokens`: the first consent writes, a later one for the same account is accepted
  * and writes nothing, a later one for a different account is refused. A window where any
  * tab could write would trade this error page for a silently added account.
  */

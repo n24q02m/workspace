@@ -1,22 +1,29 @@
 /**
  * Unified entry point for Better Workspace MCP
  *
+ * The console script is built with hull `buildCli`:
+ *   - bare argv or flag-prefixed argv (`--http`) starts the server (`serve`).
+ *   - `auth [--user <namespace>]` adds a Google account from the host (src/auth/cli-auth.ts).
+ *   - `config`, `status`, `logout`, `doctor`, `token` are hull built-ins over the same store.
+ *
  * TRANSPORT_MODE selects the transport:
- *   - "stdio" (default): Local mode. One-shot Google OAuth setup on first run
- *     (mcp-core delegated redirect flow, offline access -> refresh_token),
- *     then MCP SDK StdioServerTransport directly (no daemon proxy hop).
- *   - "http": Remote mode. OAuth 2.1 delegated tới Google qua mcp-core, mỗi
- *     người dùng một bucket credential theo JWT sub (src/transports/http.ts).
+ *   - "stdio" (default): Local mode. First run opens the Google consent flow on loopback,
+ *     then the MCP SDK StdioServerTransport serves directly (no daemon proxy hop).
+ *   - "http": Remote mode. hull `runHttpServer` with bearer-token auth (multi-user); each user
+ *     has a credential namespace (src/transports/http.ts).
  */
 
 import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { buildCli } from '@n24q02m/hull'
+import { authCommand } from './auth/cli-auth.js'
 import { getState, resolveCredentialState } from './auth/credential-state.js'
 import { runOAuthSetup } from './auth/oauth-setup.js'
-import { SERVER_NAME } from './constants.js'
+import { SERVER_NAME, STORE_PLUGIN } from './constants.js'
 import { registerTools } from './tools/registry.js'
+import { startHttp } from './transports/http.js'
 import { getPackageVersion } from './version.js'
 
 /**
@@ -51,7 +58,7 @@ export function getTransportMode(env: NodeJS.ProcessEnv = process.env, argv: str
 }
 
 /**
- * Dynamically imports and starts the server for the specified mode.
+ * Starts the server for the specified mode.
  */
 export async function startServer(mode: string): Promise<void> {
   if (process.env.BETTER_WORKSPACE_MCP_BOOTSTRAPPED) {
@@ -61,17 +68,13 @@ export async function startServer(mode: string): Promise<void> {
   process.env.BETTER_WORKSPACE_MCP_BOOTSTRAPPED = 'true'
 
   if (mode === 'http') {
-    // Không chạy nhánh OAuth của stdio dưới đây: container không có browser, và
-    // ở remote thì mỗi người dùng tự consent qua /authorize của chính server.
-    const { startHttp } = await import('./transports/http.js')
+    // Remote users are served by the bearer-auth users file, not by a Google consent screen.
     await startHttp()
     return
   }
 
-  // Stdio mode: no static token env var (unlike notion's NOTION_TOKEN) --
-  // Google delegated OAuth persists tokens to disk via credential-state, so
-  // only the FIRST run needs the browser step; later starts resolve straight
-  // to 'configured'.
+  // Stdio mode: no static token env var. Google tokens persist to disk via credential-state,
+  // so only the FIRST run needs the browser step; later starts resolve straight to 'configured'.
   await resolveCredentialState()
   if (getState() !== 'configured') {
     await runOAuthSetup() // opens browser, persists Google tokens
@@ -104,7 +107,16 @@ export async function bootstrap(selectedMode: string = mode) {
   }
 }
 
-// Only execute bootstrap if we're the main module and not in a test environment.
+// Only run the CLI when this file is the entry point, and not inside the test environment.
 if (isMain(import.meta.url) && process.env.NODE_ENV !== 'test') {
-  bootstrap()
+  const cli = buildCli(SERVER_NAME, {
+    serve: () => bootstrap(),
+    extra: { auth: authCommand },
+    version: getPackageVersion(),
+    // Credentials are stored under STORE_PLUGIN, so `config`/`status` must read the same slug.
+    pluginName: STORE_PLUGIN
+  })
+  cli(process.argv.slice(2)).then((code) => {
+    process.exitCode = code
+  })
 }

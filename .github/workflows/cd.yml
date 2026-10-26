@@ -197,14 +197,14 @@ jobs:
 
       - run: bun install --frozen-lockfile
       - run: bun run build
-      # OIDC trusted publishing, no NODE_AUTH_TOKEN -- the same shape as mcp-core,
-      # better-godot-mcp and better-email-mcp, none of which holds an NPM_TOKEN.
+      # OIDC trusted publishing, no NODE_AUTH_TOKEN -- the same shape as better-godot-mcp
+      # and better-email-mcp, none of which holds an NPM_TOKEN.
       # The scaffold this repo came from still carries an NODE_AUTH_TOKEN block;
-      # mcp-core removed it in "revert incorrect NPM_TOKEN env in CD workflow", so
-      # keeping it here would reintroduce something the stack deliberately dropped.
+      # The stack removed the NPM_TOKEN block in "revert incorrect NPM_TOKEN env in CD workflow",
+      # so keeping it here would reintroduce something the stack deliberately dropped.
       # --provenance needs id-token: write, granted at workflow level.
       #
-      # Two guards, both copied from mcp-core after this repo hit the failures they
+      # Two guards, both copied from the shared stack release workflow after this repo hit the failures they
       # prevent. The README check keeps the package page from reading "This package
       # does not have a README" -- the tarball is what npm renders, not the repo. The
       # already-published check makes a re-run possible: v0.1.0-beta.1 was published

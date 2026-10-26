@@ -7,7 +7,7 @@
 The server supports two transports:
 
 - **stdio**: one local user, loopback Desktop OAuth, encrypted local credential storage.
-- **HTTP**: multiple callers, Google Web OAuth, credential storage isolated by authenticated JWT `sub`; each caller can select one of that caller's configured Google accounts.
+- **HTTP**: multiple callers, bearer tokens from a users file (`WORKSPACE_USERS_FILE`), credential storage isolated per user namespace; each caller can select one of that namespace's configured Google accounts.
 
 ## Current service/tool inventory
 
@@ -42,15 +42,14 @@ bun run build
 
 `bun run type-check` checks the server TypeScript project. `bun run build` produces `build/` and `bin/cli.mjs`. CI is the authoritative source for hosted checks; local commands are source evidence only.
 
-For local stdio operation, provide `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` for a Desktop OAuth client. For HTTP operation, provide the Web client pair, `CREDENTIAL_SECRET`, and an exact `PUBLIC_URL`; set `HOST=0.0.0.0` in a container. `MCP_RELAY_PASSWORD` protects the hosted authorization entry point when configured. Never commit these values.
+For local stdio operation, provide `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` for a Desktop OAuth client. For HTTP operation, provide the Web client pair, `CREDENTIAL_SECRET`, and `WORKSPACE_USERS_FILE`; set `HOST=0.0.0.0` in a container. Never commit these values.
 
 ## Auth and isolation invariants
 
-- HTTP credential storage is keyed by authenticated caller `sub`, then contains that caller's Google accounts.
+- HTTP credential storage is keyed by the user namespace from the users file, then contains that namespace's Google accounts.
 - A requested account that is not configured is an error; it never silently falls back to the primary account.
-- `account_add` uses a loopback callback in stdio and a fixed `/accounts/callback` route in HTTP.
-- Remote OAuth state is signed, single-use, subject-bound, and carries no authority to change the default account.
-- OAuth callback HTML escapes untrusted values, including backticks, before rendering.
+- `account_add` uses a loopback consent in stdio; over HTTP it returns the `workspace auth --user <namespace>` command to run on the host.
+- HTTP accounts are added only by the host CLI `workspace auth --user`; the server exposes no consent route.
 - Tests use isolated temporary stores and hermetic protocol fixtures; real Google consent is a manual smoke scenario, not a CI test.
 
 ## Release and rollback
@@ -65,14 +64,14 @@ Rollback is forward-only through a reviewed source change and a new release. Do 
 2. Preserve `src/tools/domains/index.ts` as the registry source of truth. Add a domain by extending its `DomainDef`, action list, input properties, and matching documentation.
 3. Pagination controls for Drive, Gmail, Chat, Tasks, and Forms use a default of 20 and clamp caller values to 1–100; explicit continuation tokens remain available. Docs `getText` uses an explicit 20,000-character default, 2,000-character preview, and 1–100,000 `limit` bound with truncation markers.
 4. Keep vendored service files aligned with upstream unless a local fork is recorded in `NOTICE` and covered by the sync test.
-5. Treat package name, repository identity, MCP server ID, OAuth identity, data path, and endpoint as independent migration surfaces. The repository, npm package, container image, and server name are now `workspace`; the MCP Registry id (`io.github.n24q02m/better-workspace-mcp`), the legacy `better-workspace-mcp` bin alias, and the data path (`~/.better-workspace-mcp`, derived by mcp-core from the storage plugin name) intentionally keep the old name.
+5. Treat package name, repository identity, MCP server ID, OAuth identity, data path, and endpoint as independent migration surfaces. The repository, npm package, container image, and server name are now `workspace`; the MCP Registry id (`io.github.n24q02m/better-workspace-mcp`) and the legacy `better-workspace-mcp` bin alias intentionally keep the old name. The data path is now `~/.better-workspace` (hull keys it off the store plugin name); the legacy `~/.better-workspace-mcp` is read as a fallback.
 
 ### First week
 
 - Run `bun run check`, `bun run test`, and `bun run build` from a clean worktree.
 - Exercise the hermetic stdio and multi-account protocol tests.
 - Review open PRs individually; reject duplicate bot proposals and exclude `.jules` trace files from product commits.
-- For any auth change, rerun account isolation and callback escaping tests.
+- For any auth change, rerun account isolation and namespace-isolation tests.
 
 ### Weeks 2–3
 

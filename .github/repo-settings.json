@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "tier": 1,
-  "description": "Google Workspace MCP server (Docs/Drive/Calendar/Gmail/Sheets/Slides/Tasks/Chat/People + multi-account) — vendored gemini-cli workspace-server + mcp-core auth",
+  "description": "Google Workspace MCP server (Docs/Drive/Calendar/Gmail/Sheets/Slides/Tasks/Chat/People + multi-account) — vendored gemini-cli workspace-server + hull auth",
   "homepage": "https://docs.n24q02m.com/servers/workspace/",
   "topics": ["google-docs", "google-drive", "google-workspace", "mcp", "model-context-protocol", "typescript"]
 }

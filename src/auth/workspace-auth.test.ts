@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { PerPluginStore, setHomeDirForTesting } from '@n24q02m/mcp-core/storage'
+import { PerPluginStore, setHomeDirForTesting } from '@n24q02m/hull/storage'
 import { google } from 'googleapis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STORE_PLUGIN } from '../constants.js'
