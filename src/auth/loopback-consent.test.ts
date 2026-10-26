@@ -143,7 +143,10 @@ describe('startLoopbackConsent', () => {
   it('answers a request target that cannot be parsed with a 500 page and keeps serving', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const { handle } = await start()
-    const reply = await rawRequest(handle.port, 'GET http://[bad/ HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n')
+    const reply = await rawRequest(
+      handle.port,
+      'GET http://[bad/ HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n'
+    )
     expect(reply).toMatch(/^HTTP\/1\.1 500 /)
     expect(reply).toContain('Unexpected error.')
     expect(consoleError).toHaveBeenCalledWith('[workspace] consent request failed:', expect.any(TypeError))
