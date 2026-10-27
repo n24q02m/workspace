@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.n24q02m/better-workspace-mcp",
   "description": "Google Workspace MCP — Docs, Drive, Calendar, Gmail, Sheets, Slides, Tasks, Chat, People, Forms",
-  "version": "0.6.0-beta.1",
+  "version": "0.6.0",
   "repository": {
     "url": "https://github.com/n24q02m/workspace",
     "source": "github"
@@ -11,7 +11,7 @@
     {
       "registryType": "npm",
       "identifier": "@n24q02m/workspace",
-      "version": "0.6.0-beta.1",
+      "version": "0.6.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
