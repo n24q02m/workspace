@@ -7,7 +7,7 @@
 > **ARCHIVED 2026-09-13** — This repository is no longer maintained. Use the official Google Workspace APIs instead of this MCP server. Existing installations keep working but receive no updates or support.
 
 <p align="center">
-  <a href="https://mcp.n24q02m.com/get-started/modes-overview/"><img alt="Mode: stdio · http remote oauth" src="https://img.shields.io/badge/mode-stdio_%C2%B7_http--remote--oauth-5C6BC0"></a>
+  <img alt="Mode: stdio · http remote oauth" src="https://img.shields.io/badge/mode-stdio_%C2%B7_http--remote--oauth-5C6BC0">
   <a href="https://github.com/n24q02m/workspace/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/n24q02m/workspace/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/n24q02m/workspace/actions/workflows/cd.yml"><img alt="CD" src="https://github.com/n24q02m/workspace/actions/workflows/cd.yml/badge.svg"></a>
   <a href="https://codecov.io/gh/n24q02m/workspace"><img alt="codecov" src="https://codecov.io/gh/n24q02m/workspace/graph/badge.svg"></a>
@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mcp.n24q02m.com">Docs</a> ·
+  <a href="https://docs.n24q02m.com/servers/workspace/">Docs</a> ·
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="https://github.com/n24q02m/workspace/discussions">Community</a>
@@ -303,11 +303,9 @@ replaced in place, so nothing else changes.
 
 ## Documentation
 
-Full docs at **[mcp.n24q02m.com/servers/better-workspace-mcp/](https://mcp.n24q02m.com/servers/better-workspace-mcp/)**:
+Full docs at **[docs.n24q02m.com/servers/workspace/](https://docs.n24q02m.com/servers/workspace/)**:
 
-- [Setup](https://mcp.n24q02m.com/servers/better-workspace-mcp/setup/) -- plugin install, Docker stdio, and Docker HTTP methods
-- [Modes overview](https://mcp.n24q02m.com/get-started/modes-overview/) -- stdio (default) and HTTP (multi-user, bearer tokens)
-- [Multi-user setup](https://mcp.n24q02m.com/get-started/multi-user/) -- the per-namespace credential model behind [Remote (HTTP mode)](#remote-http-mode)
+- [Setup](https://docs.n24q02m.com/servers/workspace/setup/) -- plugin install, Docker stdio, and Docker HTTP methods
 
 Every tool also documents itself at runtime: call `help` for the full reference on
 any of them, including the exact parameters each action takes.
