@@ -5,6 +5,13 @@ Non-blocking -- the server handles the unconfigured state itself (stdio opens
 the Google consent screen on first run; HTTP sends each user to /authorize).
 Google delegated OAuth means there is no static API token: the env vars below
 are the OAuth *client*, not the user's credentials.
+
+A Google account added through the consent flow or `workspace auth` is stored by
+hull's PerPluginStore as an encrypted blob in ~/.better-workspace/config.json
+(slug STORE_PLUGIN in src/constants.ts:7; path layout in hull
+build/storage/data-dir.js and backends.js). Earlier releases wrote to
+~/.better-workspace-mcp/, which hull still reads as a fallback (src/constants.ts:4-6).
+The hook only checks that the file exists; it never reads or decrypts it.
 """
 
 import json
@@ -39,6 +46,8 @@ except ImportError:
 
 SERVER_NAME = "better-workspace-mcp"
 CREDENTIAL_KEYS = ["GOOGLE_OAUTH_CLIENT_ID"]
+# Per-user account store: current directory first, then the pre-rename directory.
+STORE_DIRS = (".better-workspace", ".better-workspace-mcp")
 EXEMPT_SUFFIXES = ("__setup", "__help", "__config", "__time")
 
 
@@ -50,7 +59,11 @@ def _is_configured() -> bool:
     for p in (home + "/.config/mcp/config.enc", os.path.join(home, ".config", "mcp", "config.enc")):
         if os.path.exists(p):
             return True
+    for store_dir in STORE_DIRS:
+        if os.path.exists(os.path.join(home, store_dir, "config.json")):
+            return True
     return False
+
 def main() -> None:
     data = read_mcp_hook_input()
 
