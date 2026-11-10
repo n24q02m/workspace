@@ -20,6 +20,12 @@ vi.mock('@n24q02m/hull', async (importOriginal) => ({
   ...(await importOriginal<typeof Hull>()),
   buildCli: vi.fn()
 }))
+// Startup resolves the data dir and migrates a pre-rename store: keep both off the
+// real home directory so this suite never writes outside its temp paths.
+vi.mock('./data-dir.js', () => ({
+  applyDataDirOverride: vi.fn(),
+  prepareDataDir: vi.fn().mockResolvedValue({ migrated: [], kept: [], deferred: [] })
+}))
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   // Must be `new`-able (main.ts does `new StdioServerTransport()`) -- an
   // arrow-function mock implementation cannot be a constructor.

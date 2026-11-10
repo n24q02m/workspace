@@ -20,17 +20,18 @@ services:
     # `docker compose run --rm -T workspace`. Plain `up` starts it with
     # no peer on the other end.
     stdin_open: true
-    # Where the credential store is written: ~/.better-workspace of the image's
-    # `node` user - config.json plus the machine-bound .secret that decrypts it.
-    # Both have to persist together, so the whole directory is one volume. A
-    # legacy ~/.better-workspace-mcp directory is read as a fallback only.
+    # Where the credential store is written: ~/.workspace of the image's `node`
+    # user - config.json plus the machine-bound .secret that decrypts it. Both
+    # have to persist together, so the whole directory is one volume. A store an
+    # earlier release wrote under ~/.better-workspace is copied forward on
+    # startup; the older ~/.better-workspace-mcp directory is read as a fallback.
     #
     # First-run consent does NOT work from inside the container: the OAuth flow
     # stands its consent server on a loopback port, and the browser completing the
     # consent is on the host, where 127.0.0.1 is a different machine. Authorize
     # once outside Docker (`npx @n24q02m/workspace`) and bind-mount the
-    # resulting ~/.better-workspace here instead of using a named volume.
+    # resulting ~/.workspace here instead of using a named volume.
     volumes:
-      - workspace-data:/home/node/.better-workspace
+      - workspace-data:/home/node/.workspace
 volumes:
   workspace-data:

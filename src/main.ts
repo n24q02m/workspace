@@ -25,7 +25,7 @@ import { getState, resolveCredentialState } from './auth/credential-state.js'
 import { runOAuthSetup } from './auth/oauth-setup.js'
 import { cliHelpText, toolCommands } from './cli/tools.js'
 import { SERVER_NAME, STORE_PLUGIN } from './constants.js'
-import { applyDataDirOverride } from './data-dir.js'
+import { prepareDataDir } from './data-dir.js'
 import { registerTools } from './tools/registry.js'
 import { startHttp } from './transports/http.js'
 import { getPackageVersion } from './version.js'
@@ -65,8 +65,9 @@ export function getTransportMode(env: NodeJS.ProcessEnv = process.env, argv: str
  * Starts the server for the specified mode.
  */
 export async function startServer(mode: string): Promise<void> {
-  // `WORKSPACE_DATA_DIR`, if set, must be in force before the first credential read.
-  applyDataDirOverride()
+  // `WORKSPACE_DATA_DIR`, if set, must be in force before the first credential
+  // read, and a store written by an earlier release moves across once.
+  await prepareDataDir()
   if (process.env.BETTER_WORKSPACE_MCP_BOOTSTRAPPED) {
     console.error(`[${SERVER_NAME}] Startup aborted: server already running in this process tree.`)
     return
@@ -114,10 +115,12 @@ export async function bootstrap(selectedMode: string = mode) {
 }
 
 // Builds the console-script CLI and runs it. Exported so the entry wiring is testable.
-export function runCli(argv: string[]): Promise<void> {
+export async function runCli(argv: string[]): Promise<void> {
   // Before buildCli parses argv: its built-in `config`, `status` and `doctor`
   // commands read the credential store.
-  applyDataDirOverride()
+  // `WORKSPACE_DATA_DIR` must be in force, and a store written by an earlier
+  // release moves across once, before anything reads the credential store.
+  await prepareDataDir()
 
   // `--help` is the one place the tool groups and the operator commands have to
   // be told apart; hull's flat list would merge them. Everything else stays
@@ -125,7 +128,7 @@ export function runCli(argv: string[]): Promise<void> {
   if (argv[0] === '-h' || argv[0] === '--help') {
     console.log(cliHelpText())
     process.exitCode = 0
-    return Promise.resolve()
+    return
   }
 
   const cli = buildCli(SERVER_NAME, {
@@ -144,9 +147,7 @@ export function runCli(argv: string[]): Promise<void> {
     // Credentials are stored under STORE_PLUGIN, so `config`/`status` must read the same slug.
     pluginName: STORE_PLUGIN
   })
-  return cli(argv).then((code) => {
-    process.exitCode = code
-  })
+  process.exitCode = await cli(argv)
 }
 
 // Only run the CLI when this file is the entry point, and not inside the test environment.

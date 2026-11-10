@@ -4,14 +4,15 @@
  * that a hostile value cannot walk out of the base.
  *
  * Workspace state is hull's per-plugin credential store, so the base is hull's
- * home directory and the store lands in `<base>/.better-workspace/`
+ * home directory and the store lands in `<base>/.workspace/`
  * (`config.json` for the single-user bucket, `subs/<sub>/config.json` for the
  * HTTP multi-user ones). The directory name is `STORE_PLUGIN` from
  * src/constants.ts with the leading dot hull's layout adds; a test pins the two
- * together.
+ * together. Stores written by earlier releases under `~/.better-workspace/` are
+ * copied forward once at startup (see src/data-dir-migration.ts).
  *
  * `WORKSPACE_DATA_DIR` replaces the base outright, so a container can mount a
- * single volume: `-e WORKSPACE_DATA_DIR=/data` -> `/data/.better-workspace/config.json`.
+ * single volume: `-e WORKSPACE_DATA_DIR=/data` -> `/data/.workspace/config.json`.
  *
  * Guard: a RELATIVE value is resolved against `$HOME` and must stay inside it,
  * so `..`, `../..`, `..\\..` and NUL bytes cannot leave the base. An ABSOLUTE
@@ -26,6 +27,7 @@ import { isAbsolute, join, resolve, sep } from 'node:path'
 // override only under this name (there is no production alias in 0.4.x).
 import { setHomeDirForTesting as overrideHullHomeDir } from '@n24q02m/hull/storage'
 import { STORE_PLUGIN } from './constants.js'
+import { type MigrationReport, migrateLegacyStore } from './data-dir-migration.js'
 
 /** Env var that replaces the base directory. */
 export const DATA_DIR_ENV = 'WORKSPACE_DATA_DIR'
@@ -88,4 +90,14 @@ export function applyDataDirOverride(env: NodeJS.ProcessEnv = process.env): stri
   const base = resolveBaseDir(env)
   overrideHullHomeDir(base)
   return base
+}
+
+/**
+ * Prepare the store before the first credential read: put `WORKSPACE_DATA_DIR`
+ * in force (so hull's home is the base this process writes under) and copy a
+ * pre-rename store forward. Both steps are process-wide and idempotent.
+ */
+export async function prepareDataDir(env: NodeJS.ProcessEnv = process.env): Promise<MigrationReport> {
+  applyDataDirOverride(env)
+  return migrateLegacyStore()
 }

@@ -101,8 +101,9 @@ not on a public URL. Enable the Workspace APIs you plan to call on the same
 project, and add yourself as a test user while the consent screen is unpublished.
 
 The first run opens the Google consent screen in your browser; the refresh token
-is stored encrypted on your machine under `~/.better-workspace/` (a legacy
-`~/.better-workspace-mcp/` is read as a fallback), so later runs start without asking again.
+is stored encrypted on your machine under `~/.workspace/` (a store an earlier
+release wrote under `~/.better-workspace/` is copied forward on the next start, and the
+older `~/.better-workspace-mcp/` is read as a fallback), so later runs start without asking again.
 
 The same server can also serve several people over HTTP -- see
 [Remote (HTTP mode)](#remote-http-mode).
@@ -161,11 +162,11 @@ and renames it on the way into the container.
 | `GOOGLE_OAUTH_CLIENT_SECRET` | yes | Web client secret. Same. |
 | `CREDENTIAL_SECRET` | yes | Derives the encryption key of each user's credential store. The server refuses to start without it, rather than fail in the middle of a user's consent. |
 | `WORKSPACE_USERS_FILE` | yes in HTTP | Users file that maps each bearer token to a user namespace (hull `multi` auth). Unset uses hull's default location. |
-| `WORKSPACE_DATA_DIR` | no | Base directory for the credential store (`<dir>/.better-workspace/`, one encrypted blob per user). Unset uses the home directory. A relative value is resolved under the home directory and must stay inside it, so use an absolute path for a mounted volume. |
+| `WORKSPACE_DATA_DIR` | no | Base directory for the credential store (`<dir>/.workspace/`, one encrypted blob per user). Unset uses the home directory. A relative value is resolved under the home directory and must stay inside it, so use an absolute path for a mounted volume. |
 | `PORT` | no | Listen port. `0` (the default) asks the OS for a free one. |
 | `HOST` | no | Bind address. Defaults to loopback, so a container needs `0.0.0.0`. |
 
-Credentials are stored on local disk under `~/.better-workspace/`, which is the data volume in the container. A legacy `~/.better-workspace-mcp/` is read as a fallback.
+Credentials are stored on local disk under `~/.workspace/`, which is the data volume in the container. A store from an earlier release (`~/.better-workspace/`) is copied forward on startup, and the older `~/.better-workspace-mcp/` is read as a fallback.
 
 `docker-compose.http.yml` in this repo is these variables written out as a
 runnable overlay.
