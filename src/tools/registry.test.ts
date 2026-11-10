@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as ConfigModule from './config.js'
 
 vi.mock('./domains/docs.js', () => ({
   docs: vi.fn(),
@@ -19,7 +20,13 @@ vi.mock('./domains/drive.js', () => ({
   ]
 }))
 
-vi.mock('./config.js', () => ({ config: vi.fn() }))
+// `config` is stubbed (no credential store in tests), but CONFIG_ACTIONS comes
+// from the real module: it is the list registry.ts builds the schema enum from,
+// and a hand copy here would stop catching drift between the two.
+vi.mock('./config.js', async () => {
+  const actual = await vi.importActual<typeof ConfigModule>('./config.js')
+  return { ...actual, config: vi.fn() }
+})
 
 vi.mock('../auth/credential-state.js', () => ({
   getState: vi.fn(() => 'configured'),

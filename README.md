@@ -188,7 +188,7 @@ One composite tool per Workspace domain, plus `config` and `help`:
 | `people` | Profile lookups -- `getMe`, `getUserProfile`, `getUserRelations` |
 | `forms` | Forms -- `create`, `get`, `batchUpdate`, `listResponses`, `getResponse` |
 | `time` | Local date/time/timezone helpers (no Google account needed) |
-| `config` | Credential state and account management |
+| `config` | Credential state and account management (CLI: `config-tool`) |
 | `help` | Full documentation for any tool |
 
 Questions are added to a form with `forms(action="batchUpdate")`, not at `create`;
@@ -237,6 +237,17 @@ tool subcommands and the operator commands (`auth`, `config`, `status`, `logout`
 `doctor`, `token`) separately, and `workspace <tool> --help` prints that tool's
 actions and options.
 
+One tool name is already taken. `config` is the operator command that reads the
+credential store hull manages (`workspace config status`); the MCP `config` tool
+is a different surface -- credential lifecycle plus the Google accounts the
+server acts as. It keeps a console path under the alias `config-tool`, so neither
+command can silently stand in for the other:
+
+```sh
+workspace config-tool status --json
+workspace config-tool account_list
+```
+
 | Group | Example |
 | --- | --- |
 | `docs` | `workspace docs getText --documentId <document-id> --limit 2000` |
@@ -250,6 +261,7 @@ actions and options.
 | `people` | `workspace people getMe --json` |
 | `forms` | `workspace forms listResponses --formId <form-id> --pageSize 10` |
 | `time` | `workspace time getCurrentTime --json` |
+| `config-tool` | `workspace config-tool status --json` (the MCP `config` tool) |
 | `help` | `workspace help gmail` |
 
 Values are coerced from the tool's own schema: `--maxResults 5` is a number,
@@ -267,6 +279,9 @@ is acting as:
 ```json
 { "action": "status" }
 ```
+
+From a shell the same call is `workspace config-tool status --json`, and it works
+before consent -- it reads the store, it does not need Google.
 
 Then call a domain tool. On `docs`, `create` returns the new document's ID, which
 `getText` reads back:
@@ -306,6 +321,18 @@ Accounts are managed through the `config` tool:
 | `config(action="account_list")` | The configured accounts and which one is primary. |
 | `config(action="account_remove", account="<email>")` | Forget one account. |
 | `config(action="account_set_default", account="<email>")` | Make one account the primary. |
+
+From a shell, the same four calls:
+
+```sh
+workspace config-tool account_add
+workspace config-tool account_list
+workspace config-tool account_remove --account <email>
+workspace config-tool account_set_default --account <email>
+```
+
+`config-tool`, not `config`: the plain name is the operator command that reads the
+credential store.
 
 The first account authorized becomes the primary. Removing the primary promotes
 one of the remaining accounts; removing the last one puts the server back to

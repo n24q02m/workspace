@@ -9,9 +9,19 @@ vi.mock('../tools/dispatch.js', () => ({
 }))
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type * as DispatchModule from '../tools/dispatch.js'
 import { dispatchTool } from '../tools/dispatch.js'
 import { DOMAINS } from '../tools/domains/index.js'
-import { type CliIo, cliHelpText, runToolSubcommand, TOOL_SUBCOMMAND_NAMES, toolCommands } from './tools.js'
+import { INFRA_TOOLS } from '../tools/registry.js'
+import {
+  type CliIo,
+  cliHelpText,
+  OPERATOR_COMMANDS,
+  runToolSubcommand,
+  TOOL_ALIASES,
+  TOOL_SUBCOMMAND_NAMES,
+  toolCommands
+} from './tools.js'
 
 function capture() {
   const out: string[] = []
@@ -30,16 +40,48 @@ describe('tool subcommand wiring', () => {
     vi.mocked(dispatchTool).mockResolvedValue(toolResult('ok'))
   })
 
-  it('exposes one subcommand per domain tool plus help', () => {
+  it('exposes one subcommand per domain tool, plus help and one per alias', () => {
     expect(Object.keys(toolCommands()).sort()).toEqual([...TOOL_SUBCOMMAND_NAMES].sort())
-    expect(TOOL_SUBCOMMAND_NAMES).toEqual([...DOMAINS.map((domain) => domain.name), 'help'])
+    expect(TOOL_SUBCOMMAND_NAMES).toEqual([
+      ...DOMAINS.map((domain) => domain.name),
+      'help',
+      ...Object.keys(TOOL_ALIASES)
+    ])
   })
 
-  it('never shadows the operator commands hull already owns', () => {
+  it('never shadows an operator command', () => {
     const commands = toolCommands()
-    for (const operator of ['config', 'status', 'logout', 'doctor', 'token', 'relay', 'auth']) {
-      expect(commands[operator]).toBeUndefined()
+    for (const operator of OPERATOR_COMMANDS) {
+      expect(commands[operator.name]).toBeUndefined()
     }
+  })
+
+  // The MCP `config` tool and the operator `config` command are different
+  // surfaces. The tool keeps a console path under the `config-tool` alias, and
+  // it must run the config handler -- not the domain lookup, and not hull's.
+  it('routes `config-tool status` to the MCP config tool', async () => {
+    vi.mocked(dispatchTool).mockResolvedValue(toolResult('{"state":"awaiting_setup","configured":false}'))
+    const { io, out } = capture()
+
+    const code = await runToolSubcommand('config-tool', ['status'], io)
+
+    expect(code).toBe(0)
+    expect(dispatchTool).toHaveBeenCalledWith('config', { action: 'status' })
+    expect(out).toEqual(['{"state":"awaiting_setup","configured":false}'])
+  })
+
+  it('names the MCP tool in the --json envelope of an aliased subcommand', async () => {
+    vi.mocked(dispatchTool).mockResolvedValue(toolResult('{"accounts":[],"primary":null}'))
+    const { io, out } = capture()
+
+    const code = await runToolSubcommand('config-tool', ['account_list', '--json'], io)
+
+    expect(code).toBe(0)
+    expect(JSON.parse(out.join('\n'))).toEqual({
+      tool: 'config',
+      action: 'account_list',
+      result: { accounts: [], primary: null }
+    })
   })
 
   it('forwards the action and parsed options of every domain to the shared dispatch', async () => {
@@ -53,6 +95,44 @@ describe('tool subcommand wiring', () => {
         action: domain.actions[0],
         account: 'me@example.com'
       })
+    }
+  })
+})
+
+// The gap this closes: a tool that exists over MCP but has no console path is
+// invisible from a shell, and the omission is silent. Both sides are derived --
+// TOOL_NAMES from the real dispatch module, the subcommands from the lists this
+// CLI exposes -- so a new tool fails here instead of shipping half-reachable.
+describe('CLI parity with the tool surface', () => {
+  it('keeps TOOL_NAMES equal to the registered surface, in order', async () => {
+    // TOOL_NAMES is hand-written next to the dispatch switch, while the schemas
+    // come from DOMAINS + INFRA_TOOLS. Pin them together: adding an infra tool
+    // to the registry without adding it here would leave it out of the parity
+    // walk below as well.
+    const { TOOL_NAMES } = await vi.importActual<typeof DispatchModule>('../tools/dispatch.js')
+
+    expect(TOOL_NAMES).toEqual([...DOMAINS.map((domain) => domain.name), ...INFRA_TOOLS.map((tool) => tool.name)])
+  })
+
+  it('gives every MCP tool a console path', async () => {
+    const { TOOL_NAMES } = await vi.importActual<typeof DispatchModule>('../tools/dispatch.js')
+    const operatorNames = new Set(OPERATOR_COMMANDS.map((command) => command.name))
+    const subcommands = new Set(TOOL_SUBCOMMAND_NAMES)
+    const aliasedTools = new Set(Object.values(TOOL_ALIASES))
+
+    expect(TOOL_NAMES.length).toBeGreaterThan(0)
+    for (const tool of TOOL_NAMES) {
+      if (operatorNames.has(tool)) {
+        // An operator command owns the name, so the tool has to be aliased:
+        // `workspace config status` is the credential store, not the tool.
+        expect(aliasedTools.has(tool), `${tool} is shadowed by an operator command and has no alias`).toBe(true)
+        continue
+      }
+      expect(subcommands.has(tool), `${tool} has no CLI subcommand`).toBe(true)
+    }
+
+    for (const aliased of aliasedTools) {
+      expect(TOOL_NAMES, `alias target '${aliased}' is not an MCP tool`).toContain(aliased)
     }
   })
 })
@@ -276,7 +356,10 @@ describe('failures', () => {
     expect(err.join('\n')).toContain('--query expects a value')
   })
 
-  it('rejects a tool the CLI does not expose as a subcommand', async () => {
+  // `config` without the alias stays hull's operator command: it reads the
+  // credential store, and quietly turning it into a tool call would change what
+  // `workspace config status` prints for everyone already using it.
+  it('leaves plain `config` to the operator command, not the MCP tool', async () => {
     const { io, err } = capture()
 
     const code = await runToolSubcommand('config', ['status'], io)
@@ -284,6 +367,7 @@ describe('failures', () => {
     expect(code).toBe(2)
     expect(err.join('\n')).toContain("unknown tool 'config'")
     expect(err.join('\n')).toContain('docs, time, drive')
+    expect(dispatchTool).not.toHaveBeenCalled()
   })
 
   it('rejects an extra positional argument', async () => {
@@ -338,6 +422,20 @@ describe('help', () => {
     expect(dispatchTool).not.toHaveBeenCalled()
   })
 
+  it('prints the config-tool usage from the schema the server advertises', async () => {
+    const { io, out } = capture()
+
+    const code = await runToolSubcommand('config-tool', ['--help'], io)
+
+    expect(code).toBe(0)
+    const text = out.join('\n')
+    expect(text).toContain('usage: workspace config-tool <action>')
+    // Derived, not restated: these come from the MCP tool definition.
+    expect(text).toContain('account_set_default')
+    expect(text).toContain('--account <string>')
+    expect(dispatchTool).not.toHaveBeenCalled()
+  })
+
   it('routes `workspace help <topic>` through the MCP help tool', async () => {
     const { io, out } = capture()
 
@@ -365,5 +463,8 @@ describe('help', () => {
     expect(text).toContain('  auth')
     expect(text).toContain('  doctor')
     expect(text).toContain('workspace gmail search --query "is:unread" --maxResults 5')
+    // The alias is a tool subcommand; the plain name belongs to the operator list.
+    expect(text).toMatch(/^ {2}config-tool +Manage server configuration/m)
+    expect(text).toMatch(/^ {2}config +stored credential state: .*\(MCP `config` tool: `config-tool`\)$/m)
   })
 })

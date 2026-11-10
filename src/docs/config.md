@@ -19,6 +19,23 @@ works independently of the domain tools.
 | `account_remove` | Forgets the account named in `account`. Returns `{removed, primary}`. |
 | `account_set_default` | Makes the account named in `account` the primary one. Returns `{primary}`. |
 
+## CLI
+
+Every action is also a console subcommand:
+
+```sh
+workspace config-tool status --json
+workspace config-tool account_list
+workspace config-tool account_set_default --account you@example.com
+```
+
+The subcommand is `config-tool`, not `config`: `workspace config ...` is the
+operator command that reads the credential store hull manages, which is a
+different surface from this tool. `--json` prints `{tool, action, result}` on
+stdout; a tool failure prints to stderr and exits 1. The flags (`--key`,
+`--value`, `--account`) come from this tool's schema, so they cannot drift from
+the parameters above.
+
 ## Accounts
 
 Every domain tool takes `account="<email>"`. Omit it and the call runs against
