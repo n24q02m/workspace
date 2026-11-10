@@ -5,6 +5,8 @@
  *   - bare argv or flag-prefixed argv (`--http`) starts the server (`serve`).
  *   - `auth [--user <namespace>]` adds a Google account from the host (src/auth/cli-auth.ts).
  *   - `config`, `status`, `logout`, `doctor`, `token` are hull built-ins over the same store.
+ *   - `<tool> <action> [--param value]... [--json]` calls any MCP tool from the terminal
+ *     (src/cli/tools.ts); it runs the same dispatch the `tools/call` handler runs.
  *
  * TRANSPORT_MODE selects the transport:
  *   - "stdio" (default): Local mode. First run opens the Google consent flow on loopback,
@@ -21,6 +23,7 @@ import { buildCli } from '@n24q02m/hull'
 import { authCommand } from './auth/cli-auth.js'
 import { getState, resolveCredentialState } from './auth/credential-state.js'
 import { runOAuthSetup } from './auth/oauth-setup.js'
+import { cliHelpText, toolCommands } from './cli/tools.js'
 import { SERVER_NAME, STORE_PLUGIN } from './constants.js'
 import { applyDataDirOverride } from './data-dir.js'
 import { registerTools } from './tools/registry.js'
@@ -115,6 +118,16 @@ export function runCli(argv: string[]): Promise<void> {
   // Before buildCli parses argv: its built-in `config`, `status` and `doctor`
   // commands read the credential store.
   applyDataDirOverride()
+
+  // `--help` is the one place the tool groups and the operator commands have to
+  // be told apart; hull's flat list would merge them. Everything else stays
+  // hull's: bare/flag argv serves, reserved built-ins stay operator commands.
+  if (argv[0] === '-h' || argv[0] === '--help') {
+    console.log(cliHelpText())
+    process.exitCode = 0
+    return Promise.resolve()
+  }
+
   const cli = buildCli(SERVER_NAME, {
     serve: () => bootstrap(),
     extra: {
@@ -123,7 +136,9 @@ export function runCli(argv: string[]): Promise<void> {
       relay: async () => {
         console.error('relay was removed; run `workspace auth` (see README)')
         return 2
-      }
+      },
+      // One subcommand per MCP tool; each runs the same handler the server registers.
+      ...toolCommands()
     },
     version: getPackageVersion(),
     // Credentials are stored under STORE_PLUGIN, so `config`/`status` must read the same slug.
