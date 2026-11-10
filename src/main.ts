@@ -22,6 +22,7 @@ import { authCommand } from './auth/cli-auth.js'
 import { getState, resolveCredentialState } from './auth/credential-state.js'
 import { runOAuthSetup } from './auth/oauth-setup.js'
 import { SERVER_NAME, STORE_PLUGIN } from './constants.js'
+import { applyDataDirOverride } from './data-dir.js'
 import { registerTools } from './tools/registry.js'
 import { startHttp } from './transports/http.js'
 import { getPackageVersion } from './version.js'
@@ -61,6 +62,8 @@ export function getTransportMode(env: NodeJS.ProcessEnv = process.env, argv: str
  * Starts the server for the specified mode.
  */
 export async function startServer(mode: string): Promise<void> {
+  // `WORKSPACE_DATA_DIR`, if set, must be in force before the first credential read.
+  applyDataDirOverride()
   if (process.env.BETTER_WORKSPACE_MCP_BOOTSTRAPPED) {
     console.error(`[${SERVER_NAME}] Startup aborted: server already running in this process tree.`)
     return
@@ -109,6 +112,9 @@ export async function bootstrap(selectedMode: string = mode) {
 
 // Builds the console-script CLI and runs it. Exported so the entry wiring is testable.
 export function runCli(argv: string[]): Promise<void> {
+  // Before buildCli parses argv: its built-in `config`, `status` and `doctor`
+  // commands read the credential store.
+  applyDataDirOverride()
   const cli = buildCli(SERVER_NAME, {
     serve: () => bootstrap(),
     extra: {
