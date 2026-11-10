@@ -24,6 +24,8 @@ describe('parseNotice', () => {
     expect([...lists.forked].sort()).toEqual([
       'src/vendored/services/CalendarService.ts',
       'src/vendored/services/CalendarValidation.ts',
+      'src/vendored/services/ChatService.ts',
+      'src/vendored/services/DocsService.ts',
       'src/vendored/services/DriveService.ts',
       'src/vendored/services/SheetsService.ts',
       'src/vendored/utils/MimeHelper.ts',
@@ -47,12 +49,17 @@ describe('parseNotice', () => {
   })
 
   it('refuses a section that parses to an empty list', () => {
-    const emptied = NOTICE.replace(/^- src\/vendored\/utils\/MimeHelper\.ts.*?(?=^- |^## )/ms, '')
-      .replace(/^- src\/vendored\/services\/SheetsService\.ts.*?(?=^- |^## )/ms, '')
-      .replace(/^- src\/vendored\/services\/DriveService\.ts.*?(?=^- |^## )/ms, '')
-      .replace(/^- src\/vendored\/services\/CalendarService\.ts.*?(?=^## )/ms, '')
-      .replace(/^- src\/vendored\/services\/CalendarService\.ts.*?(?=^- |^## )/ms, '')
-      .replace(/^- src\/vendored\/utils\/validation\.ts.*?(?=^## )/ms, '')
+    // Strip every entry the section actually lists, so adding a fork cannot
+    // quietly turn this test into one that strips nothing and still passes.
+    const lists = parseNotice(NOTICE)
+    let emptied = NOTICE
+    for (const file of lists.forked) {
+      emptied = emptied.replace(
+        new RegExp(`^- ${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^\\n]*(?:\\n(?!- |## )[^\\n]*)*\\n?`, 'gm'),
+        ''
+      )
+    }
+    expect(emptied.length).toBeLessThan(NOTICE.length)
     expect(() => parseNotice(emptied)).toThrow(/lists no files/)
   })
 

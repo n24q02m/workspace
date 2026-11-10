@@ -1,4 +1,5 @@
 import { GmailService } from '../../vendored/services/GmailService.js'
+import { GMAIL_BOUNDS } from './bounds.js'
 import { makeDomainRun } from './factory.js'
 
 export const GMAIL_ACTIONS = [
@@ -14,4 +15,7 @@ export const GMAIL_ACTIONS = [
   'listLabels',
   'createLabel'
 ] as const
-export const gmail = makeDomainRun(GmailService, GMAIL_ACTIONS, { pagination: { search: 'maxResults' } })
+export const gmail = makeDomainRun(GmailService, GMAIL_ACTIONS, {
+  pagination: { search: 'maxResults' },
+  bounds: GMAIL_BOUNDS
+})

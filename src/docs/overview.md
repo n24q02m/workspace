@@ -20,6 +20,26 @@ One composite tool per Google Workspace service, plus two infra tools.
 `config`, or for `overview`. The same documents are exposed as MCP resources
 under `workspace://docs/<name>`.
 
+## Response size
+
+A read can return megabytes from one call -- a document body, a mail message, a
+deck's text, a response with hundreds of comments. Every action whose payload can
+grow is bounded by default at 20,000 characters:
+
+- raise it with `max_chars` (1–100,000), or pass `full: true` for the complete
+  payload. `docs` spells the same envelope as `limit` (plus a 2,000-character
+  `preview`);
+- a paged listing keeps its page size (default 20, clamped to 1–100) and always
+  returns its `nextPageToken`; a listing with no cursor also caps how many items
+  one response carries (50–100);
+- truncation is never silent. A cut JSON payload carries
+  `_truncation: {truncated, total_characters, returned_characters, omitted_items?, note}`
+  and stays parseable; a cut text payload ends with
+  `[Content truncated: showing <kept> of <total> characters (<omitted> omitted). ...]`.
+  A pagination cursor is never cut.
+
+Each tool's page (`help(topic="<name>")`) lists its own bound and escape hatch.
+
 ## Multi-account
 
 Every domain tool takes `account="<email>"`, choosing which Google account the

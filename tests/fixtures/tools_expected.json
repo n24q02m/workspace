@@ -2,7 +2,14 @@
   "tools": [
     {
       "name": "docs",
-      "description": "Google Docs operations.\n\nActions (required params -> optional):\n- getText (documentId -> tabId, limit, preview)\n- create (title -> content)\n- writeText (documentId, text -> position, tabId)\n- getSuggestions (documentId)\n- replaceText (documentId, findText, replaceText -> tabId)\n- formatText (documentId, formats -> tabId)\n\ngetText defaults to 20,000 characters, accepts limit 1-100,000, and marks truncated output explicitly. preview defaults to 2,000 characters unless limit is provided. These bounds limit response size without changing document authorization.\n\naccount = email of the Google account to use (default: primary).",
+      "description": "Google Docs operations.\n\nActions (required params -> optional):\n- getText (documentId -> tabId, limit, preview)\n- create (title -> content)\n- writeText (documentId, text -> position, tabId)\n- getSuggestions (documentId)\n- replaceText (documentId, findText, replaceText -> tabId)\n- formatText (documentId, formats -> tabId)\n\ngetText defaults to 20,000 characters, accepts limit 1-100,000, and marks truncated output explicitly. preview defaults to 2,000 characters unless limit is provided. getSuggestions is bounded separately: 20,000 characters and 100 suggestions by default (max_chars 1-100,000, full:true for every entry). These bounds limit response size without changing document authorization.\n\naccount = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "Docs",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -47,6 +54,14 @@
             "type": "boolean",
             "description": "Use a 2000-character getText preview unless limit is provided"
           },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters returned by getSuggestions (1-100000; default 20000)"
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Return every getSuggestions entry, bypassing the default 20000-character and 100-item bounds"
+          },
           "replaceText": {
             "type": "string",
             "description": "Replacement text (for replaceText)"
@@ -75,18 +90,18 @@
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Docs",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "time",
       "description": "Local date/time/timezone helpers (no Google account needed).\n\nActions:\n- getCurrentDate\n- getCurrentTime\n- getTimeZone",
+      "annotations": {
+        "title": "Time",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -101,18 +116,18 @@
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Time",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "drive",
-      "description": "Drive operations. See the action enum for operations available in this transport. account = email of the Google account to use (default: primary).",
+      "description": "Drive operations. See the action enum for operations available in this transport.\n\nsearch, getComments and findFolder are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload). search and getComments page with pageSize and pageToken; findFolder caps at 50 name matches. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "Drive",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -175,24 +190,32 @@
             "type": "boolean",
             "description": "Restrict search to unread files where supported"
           },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
+          },
           "localPath": {
             "type": "string",
             "description": "Local destination path for downloadFile. This action is available only over local stdio transport."
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Drive",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "calendar",
-      "description": "Calendar operations. Actions: listCalendars, createEvent, listEvents, getEvent, deleteEvent, updateEvent, respondToEvent, findFreeTime. account = email of the Google account to use (default: primary).",
+      "description": "Calendar operations. Actions: listCalendars, createEvent, listEvents, getEvent, deleteEvent, updateEvent, respondToEvent, findFreeTime.\n\nlistEvents, getEvent, listCalendars and findFreeTime are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload); listEvents pages with maxResults and pageToken and always returns its nextPageToken. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "Calendar",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -234,21 +257,37 @@
           },
           "attendees": {
             "type": "array"
+          },
+          "maxResults": {
+            "type": "number",
+            "description": "Maximum events per page (for listEvents; default 20)"
+          },
+          "pageToken": {
+            "type": "string",
+            "description": "Continuation token from a previous listEvents page"
+          },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Calendar",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "chat",
-      "description": "Chat operations. Actions: listSpaces, sendMessage, findSpaceByName, getMessages, sendDm, findDmByEmail, listThreads, setUpSpace. account = email of the Google account to use (default: primary).",
+      "description": "Chat operations. Actions: listSpaces, sendMessage, findSpaceByName, getMessages, sendDm, findDmByEmail, listThreads, setUpSpace.\n\nlistSpaces, getMessages, listThreads and findSpaceByName are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload). All three listings page with pageSize and pageToken and always return their nextPageToken; findSpaceByName caps at 50 matches. account = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "Chat",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -297,6 +336,14 @@
             "type": "boolean",
             "description": "Return only unread messages"
           },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
+          },
           "orderBy": {
             "type": "string",
             "description": "Message ordering expression"
@@ -307,18 +354,18 @@
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Chat",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "gmail",
-      "description": "Gmail operations. Actions: search, get, downloadAttachment, modify, batchModify, modifyThread, send, createDraft, sendDraft, listLabels, createLabel. account = email of the Google account to use (default: primary).",
+      "description": "Gmail operations. Actions: search, get, downloadAttachment, modify, batchModify, modifyThread, send, createDraft, sendDraft, listLabels, createLabel.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "Gmail",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -379,6 +426,14 @@
             "type": "boolean",
             "description": "Include spam and trash in search results"
           },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
+          },
           "format": {
             "type": "string",
             "enum": ["minimal", "full", "raw", "metadata"],
@@ -386,18 +441,18 @@
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Gmail",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "slides",
-      "description": "Slides operations. Actions: getText, getMetadata, getImages, create, addSlide, deleteSlide, duplicateSlide, reorderSlides, getSpeakerNotes, updateSpeakerNotes, replaceAllText, insertText, deleteText, addShape, addImage, addTable, updateTextStyle, updateShapeProperties, getSlideThumbnail. account = email of the Google account to use (default: primary).",
+      "description": "Slides operations. Actions: getText, getMetadata, getImages, create, addSlide, deleteSlide, duplicateSlide, reorderSlides, getSpeakerNotes, updateSpeakerNotes, replaceAllText, insertText, deleteText, addShape, addImage, addTable, updateTextStyle, updateShapeProperties, getSlideThumbnail.\n\ngetText, getMetadata, getImages and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide or image entries. getSlideThumbnail returns one base64 image and is never cut. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "Slides",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -436,6 +491,14 @@
           "title": {
             "type": "string"
           },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
+          },
           "slideId": {
             "type": "string"
           },
@@ -444,18 +507,18 @@
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Slides",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "sheets",
       "description": "Sheets operations. Actions: getText, getRange, getMetadata.\n\ngetText and getRange return at most 20,000 characters by default (max_chars 1-100,000) and mark truncated output explicitly with the true size and omitted count; pass full:true for the complete payload. account = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "Sheets",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -475,27 +538,27 @@
             "type": "string"
           },
           "max_chars": {
-            "description": "Maximum characters returned by getText/getRange (1-100000; default 20000)",
-            "type": "number"
+            "type": "number",
+            "description": "Maximum characters returned by getText/getRange (1-100000; default 20000)"
           },
           "full": {
-            "description": "Return the complete getText/getRange payload, bypassing the default 20000-character bound",
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Return the complete getText/getRange payload, bypassing the default 20000-character bound"
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Sheets",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "tasks",
-      "description": "Tasks operations. Actions: listTaskLists, listTasks, createTask, updateTask, completeTask, deleteTask. account = email of the Google account to use (default: primary).",
+      "description": "Tasks operations. Actions: listTaskLists, listTasks, createTask, updateTask, completeTask, deleteTask.\n\nlistTasks and listTaskLists are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and page with maxResults and pageToken. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "Tasks",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -523,6 +586,14 @@
           "due": {
             "type": "string"
           },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
+          },
           "maxResults": {
             "type": "number",
             "description": "Maximum task lists or tasks per page"
@@ -533,18 +604,18 @@
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Tasks",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "people",
-      "description": "People operations. Actions: getUserProfile, getMe, getUserRelations. account = email of the Google account to use (default: primary).",
+      "description": "People operations. Actions: getUserProfile, getMe, getUserRelations.\n\nAll three actions are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), and getUserRelations keeps at most 50 relations. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "People",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -557,23 +628,31 @@
             "type": "string",
             "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
           },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
+          },
           "resourceName": {
             "type": "string"
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "People",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "forms",
-      "description": "Google Forms operations.\n\nActions (required params -> optional):\n- create (title -> documentTitle)\n- get (formId)\n- batchUpdate (formId, requests)\n- listResponses (formId -> pageSize, pageToken, filter)\n- getResponse (formId, responseId)\n\nQuestions are added with batchUpdate, not create. Responses are read-only (the Forms API cannot write one), and listing or deleting forms goes through the drive tool.\n\naccount = email of the Google account to use (default: primary).",
+      "description": "Google Forms operations.\n\nActions (required params -> optional):\n- create (title -> documentTitle)\n- get (formId)\n- batchUpdate (formId, requests)\n- listResponses (formId -> pageSize, pageToken, filter)\n- getResponse (formId, responseId)\n\nQuestions are added with batchUpdate, not create. Responses are read-only (the Forms API cannot write one), and listing or deleting forms goes through the drive tool.\n\nget, getResponse and listResponses are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload); listResponses pages with pageSize and pageToken.\n\naccount = email of the Google account to use (default: primary).",
+      "annotations": {
+        "title": "Forms",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -617,24 +696,32 @@
             "type": "string",
             "description": "Page token from a previous listResponses call"
           },
+          "max_chars": {
+            "type": "number",
+            "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
+          },
+          "full": {
+            "type": "boolean",
+            "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
+          },
           "filter": {
             "type": "string",
             "description": "Response filter, e.g. timestamp > 2026-01-01T00:00:00Z (for listResponses)"
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Forms",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "config",
       "description": "Manage server configuration, credential state, and the Google accounts this server can act as.\n\nActions:\n- status: current credential state plus the configured accounts and which is primary\n- setup_start: instructions to configure the Google account via browser OAuth (HTTP: run `workspace auth --user <namespace>` on the host)\n- setup_reset: clear credentials, return to awaiting_setup\n- setup_complete: re-check credentials after external config changes\n- set: update a runtime setting (M1 has no mutable settings; returns info)\n- cache_clear: clear any cached state (no-op in M1)\n- account_add: start the browser consent flow for one more account (stdio: returns a URL to open; HTTP: returns the `workspace auth --user <namespace>` command to run on the host)\n- account_list: list configured accounts and the primary one\n- account_remove (account): forget one account; a remaining account is promoted if it was primary\n- account_set_default (account): make one account the primary (used when a call omits account)",
+      "annotations": {
+        "title": "Config",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -668,18 +755,18 @@
           }
         },
         "required": ["action"]
-      },
-      "annotations": {
-        "title": "Config",
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
       }
     },
     {
       "name": "help",
       "description": "Get full documentation for a topic. Use when compressed tool descriptions are insufficient.",
+      "annotations": {
+        "title": "Help",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -704,13 +791,6 @@
           }
         },
         "required": ["topic"]
-      },
-      "annotations": {
-        "title": "Help",
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false
       }
     }
   ]

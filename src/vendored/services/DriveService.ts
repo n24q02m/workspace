@@ -433,15 +433,25 @@ export class DriveService {
     }
   };
 
-  public getComments = async ({ fileId }: { fileId: string }) => {
+  public getComments = async ({
+    fileId,
+    pageSize,
+    pageToken,
+  }: {
+    fileId: string;
+    pageSize?: number;
+    pageToken?: string;
+  }) => {
     logToFile(`[DriveService] Starting getComments for file: ${fileId}`);
     try {
       const drive = await this.getDriveClient();
       const id = extractDocumentId(fileId);
       const res = await drive.comments.list({
         fileId: id,
+        ...(pageSize !== undefined && { pageSize }),
+        ...(pageToken !== undefined && { pageToken }),
         fields:
-          'comments(id, content, author(displayName, emailAddress), createdTime, resolved, quotedFileContent(value), replies(id, content, author(displayName, emailAddress), createdTime, action))',
+          'nextPageToken, comments(id, content, author(displayName, emailAddress), createdTime, resolved, quotedFileContent(value), replies(id, content, author(displayName, emailAddress), createdTime, action))',
       });
 
       const comments = res.data.comments || [];
@@ -453,7 +463,16 @@ export class DriveService {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify(comments, null, 2),
+            // The cursor travels with the page: a listing that drops it makes
+            // everything past the first page unreachable.
+            text: JSON.stringify(
+              {
+                comments,
+                nextPageToken: res.data.nextPageToken ?? null,
+              },
+              null,
+              2,
+            ),
           },
         ],
       };
