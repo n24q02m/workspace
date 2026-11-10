@@ -160,6 +160,7 @@ and renames it on the way into the container.
 | `GOOGLE_OAUTH_CLIENT_SECRET` | yes | Web client secret. Same. |
 | `CREDENTIAL_SECRET` | yes | Derives the encryption key of each user's credential store. The server refuses to start without it, rather than fail in the middle of a user's consent. |
 | `WORKSPACE_USERS_FILE` | yes in HTTP | Users file that maps each bearer token to a user namespace (hull `multi` auth). Unset uses hull's default location. |
+| `WORKSPACE_DATA_DIR` | no | Base directory for the credential store (`<dir>/.better-workspace/`, one encrypted blob per user). Unset uses the home directory. A relative value is resolved under the home directory and must stay inside it, so use an absolute path for a mounted volume. |
 | `PORT` | no | Listen port. `0` (the default) asks the OS for a free one. |
 | `HOST` | no | Bind address. Defaults to loopback, so a container needs `0.0.0.0`. |
 
