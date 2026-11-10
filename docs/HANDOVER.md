@@ -70,7 +70,7 @@ Rollback is forward-only through a reviewed source change and a new release. Do 
 
 - Run `bun run check`, `bun run test`, and `bun run build` from a clean worktree.
 - Exercise the hermetic stdio and multi-account protocol tests.
-- Review open PRs individually; reject duplicate bot proposals and exclude `.jules` trace files from product commits.
+- Review open PRs individually; reject duplicate bot proposals and keep assistant-authored narration out of product commits.
 - For any auth change, rerun account isolation and namespace-isolation tests.
 
 ### Weeks 2–3
