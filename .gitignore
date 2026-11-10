@@ -50,12 +50,9 @@ __pycache__/
 *.pyc
 
 # Agent artifacts (not committed)
-.jules/
 .code-review-graph/
 
 # AI Assistant / Rules
-.jules/
-.jules
 .superpower/
 superpower/
 superpowers/
