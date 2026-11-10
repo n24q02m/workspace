@@ -184,11 +184,19 @@ export const DOMAINS: DomainDef[] = [
     description:
       'Sheets operations. Actions: ' +
       SHEETS_ACTIONS.join(', ') +
-      '. account = email of the Google account to use (default: primary).',
+      '.\n\ngetText and getRange return at most 20,000 characters by default (max_chars 1-100,000) and mark truncated output explicitly with the true size and omitted count; pass full:true for the complete payload. account = email of the Google account to use (default: primary).',
     actions: SHEETS_ACTIONS,
     inputProps: {
       spreadsheetId: { type: 'string' },
-      range: { type: 'string' }
+      range: { type: 'string' },
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by getText/getRange (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return the complete getText/getRange payload, bypassing the default 20000-character bound'
+      }
     },
     run: sheets
   },

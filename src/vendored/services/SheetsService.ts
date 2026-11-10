@@ -9,6 +9,13 @@ import { AuthManager } from '../auth/AuthManager';
 import { logToFile } from '../utils/logger';
 import { extractDocId } from '../utils/IdUtils';
 import { gaxiosOptions } from '../utils/GaxiosConfig';
+import {
+  boundJsonRows,
+  boundText,
+  MAX_SHEETS_TEXT_LIMIT,
+  resolveTextLimit,
+  truncationNote,
+} from '../utils/textBounds';
 
 export class SheetsService {
   constructor(private authManager: AuthManager) {}
@@ -92,15 +99,20 @@ export class SheetsService {
   public getText = async ({
     spreadsheetId,
     format = 'text',
+    max_chars,
+    full,
   }: {
     spreadsheetId: string;
     format?: 'text' | 'csv' | 'json';
+    max_chars?: number;
+    full?: boolean;
   }) => {
     logToFile(
       `[SheetsService] Starting getText for spreadsheet: ${spreadsheetId} with format: ${format}`,
     );
     try {
       const id = extractDocId(spreadsheetId) || spreadsheetId;
+      const limit = resolveTextLimit(max_chars, full);
 
       const sheets = await this.getSheetsClient();
       // Get spreadsheet metadata
@@ -189,12 +201,33 @@ export class SheetsService {
         content = JSON.stringify(jsonData, null, 2);
       }
 
+      const hint =
+        'Pass a larger max_chars (up to ' +
+        MAX_SHEETS_TEXT_LIMIT +
+        '), full:true, a narrower format, or getRange for one tab.';
+
+      if (format === 'json') {
+        const bounded = boundJsonRows(jsonData, limit, hint);
+        logToFile(
+          `[SheetsService] Finished getText for spreadsheet: ${id} (${bounded.returnedRows}/${bounded.totalRows} rows, ${bounded.returnedCharacters}/${bounded.totalCharacters} chars)`,
+        );
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: bounded.text,
+            },
+          ],
+        };
+      }
+
+      const bounded = boundText(content.trim(), limit, hint);
       logToFile(`[SheetsService] Finished getText for spreadsheet: ${id}`);
       return {
         content: [
           {
             type: 'text' as const,
-            text: content.trim(),
+            text: bounded.text,
           },
         ],
       };
@@ -216,15 +249,20 @@ export class SheetsService {
   public getRange = async ({
     spreadsheetId,
     range,
+    max_chars,
+    full,
   }: {
     spreadsheetId: string;
     range: string;
+    max_chars?: number;
+    full?: boolean;
   }) => {
     logToFile(
       `[SheetsService] Starting getRange for spreadsheet: ${spreadsheetId}, range: ${range}`,
     );
     try {
       const id = extractDocId(spreadsheetId) || spreadsheetId;
+      const limit = resolveTextLimit(max_chars, full);
 
       const sheets = await this.getSheetsClient();
       const response = await sheets.spreadsheets.values.get({
@@ -233,16 +271,67 @@ export class SheetsService {
       });
 
       const values = response.data.values || [];
+      const fullText = JSON.stringify({ range: response.data.range, values });
 
-      logToFile(`[SheetsService] Finished getRange for spreadsheet: ${id}`);
+      if (fullText.length <= limit) {
+        logToFile(`[SheetsService] Finished getRange for spreadsheet: ${id}`);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: fullText,
+            },
+          ],
+        };
+      }
+
+      // Keep whole rows: a sliced JSON string would not parse. Binary search the
+      // largest row prefix that fits the budget.
+      let lo = 0;
+      let hi = values.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        const size = JSON.stringify({
+          range: response.data.range,
+          values: values.slice(0, mid),
+        }).length;
+        if (size <= limit) {
+          lo = mid;
+        } else {
+          hi = mid - 1;
+        }
+      }
+
+      const keptText = JSON.stringify({
+        range: response.data.range,
+        values: values.slice(0, lo),
+      });
+      const hint =
+        'Pass a larger max_chars (up to ' +
+        MAX_SHEETS_TEXT_LIMIT +
+        '), full:true, or narrow the range.';
+
+      logToFile(
+        `[SheetsService] Finished getRange for spreadsheet: ${id} (${lo}/${values.length} rows)`,
+      );
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify({
-              range: response.data.range,
-              values: values,
-            }),
+            text: JSON.stringify(
+              {
+                range: response.data.range,
+                values: values.slice(0, lo),
+                truncated: true,
+                total_characters: fullText.length,
+                returned_characters: keptText.length,
+                returned_rows: lo,
+                total_rows: values.length,
+                truncation_note: truncationNote(fullText.length, keptText.length, hint),
+              },
+              null,
+              2,
+            ),
           },
         ],
       };
