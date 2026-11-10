@@ -4,6 +4,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import type * as Hull from '@n24q02m/hull'
 import { buildCli } from '@n24q02m/hull'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as RegistryModule from './tools/registry.js'
 
 // startServer/bootstrap need every I/O-touching dependency mocked so the
 // suite stays hermetic: no real Google OAuth, no real stdio transport.
@@ -12,7 +13,13 @@ vi.mock('./auth/credential-state.js', () => ({
   resolveCredentialState: vi.fn()
 }))
 vi.mock('./auth/oauth-setup.js', () => ({ runOAuthSetup: vi.fn() }))
-vi.mock('./tools/registry.js', () => ({ registerTools: vi.fn() }))
+// Keep the registry's data (the `config-tool` spec in cli/tools.ts is derived
+// from INFRA_TOOLS) and stub only the registration entry point, which would
+// otherwise touch a real Server.
+vi.mock('./tools/registry.js', async () => {
+  const actual = await vi.importActual<typeof RegistryModule>('./tools/registry.js')
+  return { ...actual, registerTools: vi.fn() }
+})
 // main.ts loads the http transport through a static import; vi.mock replaces it here.
 vi.mock('./transports/http.js', () => ({ startHttp: vi.fn() }))
 // main.ts builds the console script with hull buildCli; keep the rest of hull real.

@@ -20,6 +20,10 @@ One composite tool per Google Workspace service, plus two infra tools.
 `config`, or for `overview`. The same documents are exposed as MCP resources
 under `workspace://docs/<name>`.
 
+Every tool is also a shell subcommand: `workspace <tool> <action> [--param value]`.
+The one exception is `config`, whose plain name belongs to the console script's
+own credential command; the tool is `workspace config-tool <action>` there.
+
 ## Response size
 
 A read can return megabytes from one call -- a document body, a mail message, a

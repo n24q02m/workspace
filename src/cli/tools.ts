@@ -12,12 +12,19 @@
  * `{"tool", "action", "result"}` (result is the tool payload, parsed from its
  * JSON text when it is JSON). Failures go to stderr -- as
  * `{"tool", "action", "error"}` under `--json` -- with exit 1. Bad argv exits 2.
+ *
+ * Two tools do not get a subcommand named after themselves. `config` is hull's
+ * stored-credential operator command (see OPERATOR_COMMANDS), and `help` has its
+ * own argv shape. So the MCP `config` tool is reached as `config-tool`, and
+ * `help` keeps the hand-written spec below; every other subcommand is
+ * `<tool> <action>` with flags derived from the tool's input schema.
  */
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { CliHandler } from '@n24q02m/hull'
 import { dispatchTool, HELP_TOPICS } from '../tools/dispatch.js'
 import { DOMAINS } from '../tools/domains/index.js'
+import { INFRA_TOOLS } from '../tools/registry.js'
 import { getPackageVersion } from '../version.js'
 
 /** Sink for the command output. Injectable so tests capture instead of printing. */
@@ -44,7 +51,10 @@ const ACCOUNT_PROP: Record<string, unknown> = {
 }
 
 interface ToolSpec {
-  name: string
+  /** The MCP tool this subcommand runs; `dispatchTool` receives this name. */
+  tool: string
+  /** What the user types. Differs from `tool` only for an aliased name. */
+  subcommand: string
   description: string
   actions: readonly string[]
   props: Record<string, unknown>
@@ -53,17 +63,22 @@ interface ToolSpec {
 interface ToolProp {
   type: string
   description?: string
+  values?: readonly string[]
 }
 
 /**
- * The props are JSON-schema fragments carried as `unknown`; this reads the two
+ * The props are JSON-schema fragments carried as `unknown`; this reads the
  * fields the CLI uses and defaults the rest to a plain string.
  */
 function readProp(prop: unknown): ToolProp {
   if (typeof prop !== 'object' || prop === null) return { type: 'string' }
   const type = 'type' in prop && typeof prop.type === 'string' ? prop.type : 'string'
   const description = 'description' in prop && typeof prop.description === 'string' ? prop.description : undefined
-  return { type, description }
+  const values =
+    'enum' in prop && Array.isArray(prop.enum)
+      ? prop.enum.filter((value): value is string => typeof value === 'string')
+      : undefined
+  return { type, description, values }
 }
 
 /** The spec for one domain tool, as the MCP schema describes it. */
@@ -71,7 +86,8 @@ function domainSpec(name: string): ToolSpec | undefined {
   const domain = DOMAINS.find((candidate) => candidate.name === name)
   if (!domain) return undefined
   return {
-    name: domain.name,
+    tool: domain.name,
+    subcommand: domain.name,
     description: domain.description,
     actions: domain.actions,
     props: { account: ACCOUNT_PROP, ...domain.inputProps }
@@ -79,7 +95,8 @@ function domainSpec(name: string): ToolSpec | undefined {
 }
 
 const HELP_SPEC: ToolSpec = {
-  name: 'help',
+  tool: 'help',
+  subcommand: 'help',
   description: 'Full documentation for one tool (the MCP `help` tool).',
   actions: [],
   props: {
@@ -87,8 +104,67 @@ const HELP_SPEC: ToolSpec = {
   }
 }
 
-/** Domain tool names plus `help` -- every tool that is reachable as a subcommand. */
-export const TOOL_SUBCOMMAND_NAMES: readonly string[] = [...DOMAINS.map((d) => d.name), HELP_SPEC.name]
+/**
+ * Subcommands for MCP tools whose own name a console operator command already
+ * owns. The operator `config` reads the credential store hull manages
+ * (`config status`, `config delete`); the MCP `config` tool is a different
+ * surface -- credential lifecycle plus the Google accounts the server acts as.
+ * Shadowing the operator command would silently break it, so the tool keeps its
+ * CLI path under `config-tool`, the alias the email server's CLI also uses.
+ */
+export const TOOL_ALIASES: Readonly<Record<string, string>> = { 'config-tool': 'config' }
+
+/**
+ * The spec for an aliased infra tool, derived from the definition the server
+ * registers: actions come from the schema's `action` enum, options from the
+ * remaining properties. Deriving beats restating -- a parameter added to the
+ * tool becomes a flag here with no second edit to forget.
+ */
+function infraSpec(subcommand: string, tool: string): ToolSpec {
+  const definition = INFRA_TOOLS.find((candidate) => candidate.name === tool)
+  if (!definition) {
+    // Alias table, tool definitions and tool names all live in this repo; a
+    // dangling alias is a programming error, not a user error.
+    throw new Error(`subcommand '${subcommand}' aliases the unknown MCP tool '${tool}'`)
+  }
+  const { action, ...props } = definition.inputSchema.properties
+  return {
+    tool,
+    subcommand,
+    description: definition.description,
+    actions: readProp(action).values ?? [],
+    props
+  }
+}
+
+/** Operator commands: this server's `auth` and `relay` plus hull's built-ins. */
+export const OPERATOR_COMMANDS: ReadonlyArray<{ name: string; description: string }> = [
+  { name: 'auth', description: 'add a Google account on the host (`--user <namespace>` for HTTP mode)' },
+  {
+    name: 'config',
+    description: 'stored credential state: `config status` | `config delete --yes` (MCP `config` tool: `config-tool`)'
+  },
+  { name: 'status', description: 'alias of `config status`' },
+  { name: 'logout', description: 'alias of `config delete`' },
+  { name: 'doctor', description: 'environment and credential-backend checks' },
+  { name: 'token', description: 'bearer-token helpers for HTTP mode' },
+  { name: 'relay', description: 'removed; prints a pointer to `auth`' }
+]
+
+/** Domain tools, `help`, and one subcommand per alias -- the whole subcommand surface. */
+export const TOOL_SUBCOMMAND_NAMES: readonly string[] = [
+  ...DOMAINS.map((d) => d.name),
+  HELP_SPEC.subcommand,
+  ...Object.keys(TOOL_ALIASES)
+]
+
+/** Resolve a subcommand to its spec; undefined when the CLI does not expose it. */
+function specFor(subcommand: string): ToolSpec | undefined {
+  if (subcommand === HELP_SPEC.subcommand) return HELP_SPEC
+  const aliased = TOOL_ALIASES[subcommand]
+  if (aliased !== undefined) return infraSpec(subcommand, aliased)
+  return domainSpec(subcommand)
+}
 
 class UsageError extends Error {}
 
@@ -105,7 +181,7 @@ function summarizeActions(actions: readonly string[], max = 6): string {
 }
 
 function toolUsage(spec: ToolSpec): string {
-  if (spec.name === HELP_SPEC.name) {
+  if (spec.subcommand === HELP_SPEC.subcommand) {
     return [
       'usage: workspace help [topic] [--json]',
       '',
@@ -128,7 +204,7 @@ function toolUsage(spec: ToolSpec): string {
   })
 
   return [
-    `usage: workspace ${spec.name} <action> [--param <value>]... [--json]`,
+    `usage: workspace ${spec.subcommand} <action> [--param <value>]... [--json]`,
     '',
     spec.description,
     '',
@@ -145,21 +221,29 @@ function toolUsage(spec: ToolSpec): string {
 /**
  * The grouped `workspace help` / `workspace --help` surface: tool subcommands
  * and operator commands listed separately, so the two are never confused.
+ * Both sections are derived from the lists above -- adding an alias, a domain
+ * or an operator command changes this text without a second edit -- and the
+ * label column is measured rather than hardcoded, so `config-tool` does not
+ * push the descriptions out of line.
  */
 export function cliHelpText(): string {
-  const toolLines = DOMAINS.map((d) => {
-    const label = `${d.name}`.padEnd(10)
-    return `  ${label}${summarize(d.description)} — ${summarizeActions(d.actions)}`
+  const toolEntries: Array<{ label: string; description: string; actions: readonly string[] }> = [
+    ...DOMAINS.map((d) => ({ label: d.name, description: d.description, actions: d.actions })),
+    ...Object.entries(TOOL_ALIASES).map(([subcommand, tool]) => {
+      const spec = infraSpec(subcommand, tool)
+      return { label: subcommand, description: spec.description, actions: spec.actions }
+    }),
+    { label: HELP_SPEC.subcommand, description: 'Full documentation for any tool', actions: [] }
+  ]
+
+  const labels = [...toolEntries.map((entry) => entry.label), ...OPERATOR_COMMANDS.map((command) => command.name)]
+  const width = Math.max(...labels.map((label) => label.length)) + 2
+
+  const toolLines = toolEntries.map((entry) => {
+    const suffix = entry.actions.length > 0 ? ` — ${summarizeActions(entry.actions)}` : ''
+    return `  ${entry.label.padEnd(width)}${summarize(entry.description)}${suffix}`
   })
-  const operatorCommands = [
-    ['auth', 'add a Google account on the host (`--user <namespace>` for HTTP mode)'],
-    ['config', 'stored credential state: `config status` | `config delete --yes`'],
-    ['status', 'alias of `config status`'],
-    ['logout', 'alias of `config delete`'],
-    ['doctor', 'environment and credential-backend checks'],
-    ['token', 'bearer-token helpers for HTTP mode'],
-    ['relay', 'removed; prints a pointer to `auth`']
-  ].map(([name, description]) => `  ${name.padEnd(10)}${description}`)
+  const operatorLines = OPERATOR_COMMANDS.map((command) => `  ${command.name.padEnd(width)}${command.description}`)
 
   return [
     `workspace ${getPackageVersion()} — Google Workspace MCP server`,
@@ -172,15 +256,15 @@ export function cliHelpText(): string {
     '',
     'tools (each is an MCP tool; the CLI runs the same handler):',
     ...toolLines,
-    `  ${'help'.padEnd(10)}full documentation for any tool`,
     '',
     'operator commands (not tools):',
-    ...operatorCommands,
+    ...operatorLines,
     '',
     'examples:',
     '  workspace time getCurrentTime --json',
     '  workspace gmail search --query "is:unread" --maxResults 5',
     '  workspace docs getText --documentId <document-id> --limit 2000',
+    '  workspace config-tool status --json',
     '  workspace help tasks'
   ].join('\n')
 }
@@ -305,11 +389,12 @@ function payloadOf(text: string): unknown {
  * 0 success, 1 tool failure, 2 argv the CLI could not parse.
  */
 export async function runToolSubcommand(name: string, argv: string[], io: CliIo = defaultIo): Promise<number> {
-  const spec = name === HELP_SPEC.name ? HELP_SPEC : domainSpec(name)
+  const spec = specFor(name)
   if (!spec) {
     io.err(`workspace: unknown tool '${name}' (expected one of: ${TOOL_SUBCOMMAND_NAMES.join(', ')})`)
     return USAGE_EXIT
   }
+  const isHelp = spec.tool === HELP_SPEC.tool
 
   if (argv.some((token) => HELP_FLAGS[token] === true)) {
     io.out(toolUsage(spec))
@@ -317,7 +402,7 @@ export async function runToolSubcommand(name: string, argv: string[], io: CliIo 
   }
 
   // `workspace help` with no topic is the grouped surface listing.
-  if (spec.name === HELP_SPEC.name && !argv.some((token) => !token.startsWith('-'))) {
+  if (isHelp && !argv.some((token) => !token.startsWith('-'))) {
     io.out(cliHelpText())
     return 0
   }
@@ -326,7 +411,7 @@ export async function runToolSubcommand(name: string, argv: string[], io: CliIo 
   let action: string
   try {
     parsed = parseArgv(spec, argv)
-    if (spec.name === HELP_SPEC.name) {
+    if (isHelp) {
       if (parsed.positionals.length > 1) {
         throw new UsageError(`help takes one topic, got ${parsed.positionals.length}`)
       }
@@ -350,11 +435,13 @@ export async function runToolSubcommand(name: string, argv: string[], io: CliIo 
     return USAGE_EXIT
   }
 
-  const result = await dispatchTool(spec.name, parsed.params)
+  // `spec.tool`, not the subcommand: `config-tool` runs the MCP `config` tool,
+  // and the envelope names the tool whose handler ran.
+  const result = await dispatchTool(spec.tool, parsed.params)
 
   if (result.isError === true) {
     const message = textOf(result)
-    io.err(parsed.json ? JSON.stringify({ tool: spec.name, action, error: message }) : message)
+    io.err(parsed.json ? JSON.stringify({ tool: spec.tool, action, error: message }) : message)
     return 1
   }
 
@@ -363,13 +450,14 @@ export async function runToolSubcommand(name: string, argv: string[], io: CliIo 
     io.out(text)
     return 0
   }
-  io.out(JSON.stringify({ tool: spec.name, action, result: payloadOf(text) }, null, 2))
+  io.out(JSON.stringify({ tool: spec.tool, action, result: payloadOf(text) }, null, 2))
   return 0
 }
 
 /**
- * Subcommand handlers for hull `buildCli`, keyed by tool name. The dispatcher
- * routes `workspace docs ...` here; every other subcommand is untouched.
+ * Subcommand handlers for hull `buildCli`, keyed by subcommand name -- a tool
+ * name, or an alias like `config-tool`. The dispatcher routes `workspace docs
+ * ...` here; every other subcommand is untouched.
  */
 export function toolCommands(): Record<string, CliHandler> {
   return Object.fromEntries(

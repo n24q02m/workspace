@@ -11,18 +11,30 @@ import { getAuth, getState, resetState, resolveCredentialState } from '../auth/c
 import { currentSubject } from '../auth/subject-context.js'
 import { WorkspaceMCPError, withErrorHandling } from './helpers/errors.js'
 
+/**
+ * Every action this tool accepts, in the order the schema advertises them.
+ * The input type, the error message and the MCP `action` enum
+ * (tools/registry.ts) are all derived from this one list, so adding an action
+ * cannot leave one of the three behind -- and the CLI's `config-tool` spec
+ * reads the same enum (cli/tools.ts).
+ */
+export const CONFIG_ACTIONS = [
+  'status',
+  'setup_start',
+  'setup_reset',
+  'setup_complete',
+  'set',
+  'cache_clear',
+  'account_add',
+  'account_list',
+  'account_remove',
+  'account_set_default'
+] as const
+
+export type ConfigAction = (typeof CONFIG_ACTIONS)[number]
+
 export interface ConfigInput {
-  action:
-    | 'status'
-    | 'setup_start'
-    | 'setup_reset'
-    | 'setup_complete'
-    | 'set'
-    | 'cache_clear'
-    | 'account_add'
-    | 'account_list'
-    | 'account_remove'
-    | 'account_set_default'
+  action: ConfigAction
   key?: string
   value?: string
   account?: string
@@ -32,8 +44,7 @@ export interface ConfigInput {
 // hand-rolled lookalike) keeps `config()` structurally exact for setRequestHandler.
 export type ConfigResult = CallToolResult
 
-const VALID_ACTIONS =
-  'status, setup_start, setup_reset, setup_complete, set, cache_clear, account_add, account_list, account_remove, account_set_default'
+const VALID_ACTIONS = CONFIG_ACTIONS.join(', ')
 
 async function statusJson(): Promise<string> {
   const state = getState()

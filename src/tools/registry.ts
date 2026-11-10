@@ -18,6 +18,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema
 } from '@modelcontextprotocol/sdk/types.js'
+import { CONFIG_ACTIONS } from './config.js'
 import { DOCS_DIR, dispatchTool, HELP_TOPICS } from './dispatch.js'
 import type { DomainDef } from './domains/index.js'
 import { DOMAINS } from './domains/index.js'
@@ -87,10 +88,31 @@ function domainToolDef(domain: DomainDef, allowLocalFilesystem: boolean) {
   }
 }
 
+/** A tool definition that is not a domain mega-tool: `config` and `help`. */
+export interface InfraToolDefinition {
+  name: string
+  description: string
+  annotations: {
+    title: string
+    readOnlyHint: boolean
+    destructiveHint: boolean
+    idempotentHint: boolean
+    openWorldHint: boolean
+  }
+  inputSchema: {
+    type: 'object'
+    properties: Record<string, unknown>
+    required: readonly string[]
+  }
+}
+
 /**
- * N=1 domain now (docs). Task 7 appends 9 more entries to DOMAINS, not here.
+ * Exported because the console script derives its infra tool subcommands from
+ * these definitions (cli/tools.ts): the `config-tool` spec takes its actions and
+ * options from the schema the server advertises, so a flag can never be missing
+ * from the CLI for a parameter the MCP tool accepts.
  */
-const INFRA_TOOLS = [
+export const INFRA_TOOLS: readonly InfraToolDefinition[] = [
   {
     name: 'config',
     description:
@@ -107,18 +129,7 @@ const INFRA_TOOLS = [
       properties: {
         action: {
           type: 'string',
-          enum: [
-            'status',
-            'setup_start',
-            'setup_reset',
-            'setup_complete',
-            'set',
-            'cache_clear',
-            'account_add',
-            'account_list',
-            'account_remove',
-            'account_set_default'
-          ],
+          enum: [...CONFIG_ACTIONS],
           description: 'Action to perform'
         },
         key: { type: 'string', description: 'Setting key (for set action)' },
