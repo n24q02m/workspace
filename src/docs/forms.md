@@ -87,6 +87,25 @@ These are missing from the Google Forms API itself, not omitted here:
 If a form has a linked response Sheet, `get` returns its `linkedSheetId`, and the
 `sheets` tool reads bulk responses from it more cheaply than paging `listResponses`.
 
+## Bounds
+
+A form definition and a submitted response both grow with the number of
+questions, and `listResponses` returns whole submissions, so the reads are
+bounded by default:
+
+| Action | Default bound | Escape hatch |
+| --- | --- | --- |
+| `get` | 20,000 characters | raise `max_chars` (up to 100000), or `full: true` |
+| `getResponse` | 20,000 characters | raise `max_chars`, or `full: true` |
+| `listResponses` | 20,000 characters; pages of `pageSize` (default 20) | next `pageToken`, or `full: true` |
+
+`listResponses` always returns its `nextPageToken`. Truncation is never silent: a
+cut payload carries
+`_truncation: {truncated, total_characters, returned_characters, omitted_items?, note}`
+with
+`[Content truncated: showing <kept> of <total> characters (<omitted> omitted). ...]`,
+and a JSON payload stays parseable.
+
 ## Result shape
 
 Every action returns `{content: [{type: "text", text}]}` with `text` holding the

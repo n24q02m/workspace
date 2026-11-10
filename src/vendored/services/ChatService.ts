@@ -60,18 +60,31 @@ export class ChatService {
     return space;
   }
 
-  public listSpaces = async () => {
+  public listSpaces = async (
+    {
+      pageSize,
+      pageToken,
+    }: { pageSize?: number; pageToken?: string } = {},
+  ) => {
     logToFile('Listing chat spaces');
     try {
       const chat = await this.getChatClient();
-      const res = await chat.spaces.list({});
+      const res = await chat.spaces.list({
+        ...(pageSize !== undefined && { pageSize }),
+        ...(pageToken !== undefined && { pageToken }),
+      });
       const spaces = res.data.spaces || [];
       logToFile(`Successfully listed ${spaces.length} chat spaces.`);
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify(spaces),
+            // The cursor travels with the page: a listing that drops it makes
+            // everything past the first page unreachable.
+            text: JSON.stringify({
+              spaces,
+              nextPageToken: res.data.nextPageToken ?? null,
+            }),
           },
         ],
       };

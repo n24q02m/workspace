@@ -26,7 +26,7 @@ describe('vendored DocsService over the shim', () => {
   it('bounds text explicitly and preserves truncation metadata', () => {
     const bounded = boundDocsText('abcdef', 3)
     expect(bounded).toEqual({
-      text: 'abc\n\n[Content truncated: 3 characters omitted. Request a larger limit to continue, up to 100000.]',
+      text: 'abc\n\n[Content truncated: showing 3 of 6 characters (3 omitted). Request a larger limit, up to 100000.]',
       truncated: true,
       totalCharacters: 6
     })
@@ -67,7 +67,7 @@ describe('vendored DocsService over the shim', () => {
 
     expect(text).toContain('x'.repeat(PREVIEW_DOCS_TEXT_LIMIT - titlePrefix.length))
     expect(text).toContain('[Content truncated:')
-    expect(text.length).toBeLessThan(2100)
+    expect(text.length).toBeLessThan(PREVIEW_DOCS_TEXT_LIMIT + 120)
     expect(documentsGet).toHaveBeenLastCalledWith(
       expect.objectContaining({ documentId: 'doc1', includeTabsContent: true })
     )

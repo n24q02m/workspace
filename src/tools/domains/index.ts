@@ -34,7 +34,7 @@ export const DOMAINS: DomainDef[] = [
   {
     name: 'docs',
     description:
-      'Google Docs operations.\n\nActions (required params -> optional):\n- getText (documentId -> tabId, limit, preview)\n- create (title -> content)\n- writeText (documentId, text -> position, tabId)\n- getSuggestions (documentId)\n- replaceText (documentId, findText, replaceText -> tabId)\n- formatText (documentId, formats -> tabId)\n\ngetText defaults to 20,000 characters, accepts limit 1-100,000, and marks truncated output explicitly. preview defaults to 2,000 characters unless limit is provided. These bounds limit response size without changing document authorization.\n\naccount = email of the Google account to use (default: primary).',
+      'Google Docs operations.\n\nActions (required params -> optional):\n- getText (documentId -> tabId, limit, preview)\n- create (title -> content)\n- writeText (documentId, text -> position, tabId)\n- getSuggestions (documentId)\n- replaceText (documentId, findText, replaceText -> tabId)\n- formatText (documentId, formats -> tabId)\n\ngetText defaults to 20,000 characters, accepts limit 1-100,000, and marks truncated output explicitly. preview defaults to 2,000 characters unless limit is provided. getSuggestions is bounded separately: 20,000 characters and 100 suggestions by default (max_chars 1-100,000, full:true for every entry). These bounds limit response size without changing document authorization.\n\naccount = email of the Google account to use (default: primary).',
     actions: DOCS_ACTIONS,
     inputProps: {
       documentId: { type: 'string', description: 'Google Doc ID or URL' },
@@ -48,6 +48,14 @@ export const DOMAINS: DomainDef[] = [
       tabId: { type: 'string', description: 'Tab ID to target (optional, for multi-tab documents)' },
       limit: { type: 'number', description: 'Maximum Docs text characters for getText (1-100000; default 20000)' },
       preview: { type: 'boolean', description: 'Use a 2000-character getText preview unless limit is provided' },
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by getSuggestions (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return every getSuggestions entry, bypassing the default 20000-character and 100-item bounds'
+      },
       replaceText: { type: 'string', description: 'Replacement text (for replaceText)' },
       formats: {
         type: 'array',
@@ -77,7 +85,7 @@ export const DOMAINS: DomainDef[] = [
   {
     name: 'drive',
     description:
-      'Drive operations. See the action enum for operations available in this transport. account = email of the Google account to use (default: primary).',
+      'Drive operations. See the action enum for operations available in this transport.\n\nsearch, getComments and findFolder are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload). search and getComments page with pageSize and pageToken; findFolder caps at 50 name matches. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).',
     actions: DRIVE_ACTIONS,
     localOnlyActions: ['downloadFile'],
     localOnlyInputProps: ['localPath'],
@@ -94,6 +102,14 @@ export const DOMAINS: DomainDef[] = [
       pageToken: { type: 'string', description: 'Continuation token from a previous search page' },
       corpus: { type: 'string', enum: ['user', 'domain'], description: 'Drive search corpus' },
       unreadOnly: { type: 'boolean', description: 'Restrict search to unread files where supported' },
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
+      },
       localPath: {
         type: 'string',
         description:
@@ -107,7 +123,7 @@ export const DOMAINS: DomainDef[] = [
     description:
       'Calendar operations. Actions: ' +
       CALENDAR_ACTIONS.join(', ') +
-      '. account = email of the Google account to use (default: primary).',
+      '.\n\nlistEvents, getEvent, listCalendars and findFreeTime are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload); listEvents pages with maxResults and pageToken and always returns its nextPageToken. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).',
     actions: CALENDAR_ACTIONS,
     inputProps: {
       calendarId: { type: 'string' },
@@ -116,7 +132,17 @@ export const DOMAINS: DomainDef[] = [
       description: { type: 'string' },
       start: { type: 'string' },
       end: { type: 'string' },
-      attendees: { type: 'array' }
+      attendees: { type: 'array' },
+      maxResults: { type: 'number', description: 'Maximum events per page (for listEvents; default 20)' },
+      pageToken: { type: 'string', description: 'Continuation token from a previous listEvents page' },
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
+      }
     },
     run: calendar
   },
@@ -125,7 +151,7 @@ export const DOMAINS: DomainDef[] = [
     description:
       'Chat operations. Actions: ' +
       CHAT_ACTIONS.join(', ') +
-      '. account = email of the Google account to use (default: primary).',
+      '.\n\nlistSpaces, getMessages, listThreads and findSpaceByName are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload). All three listings page with pageSize and pageToken and always return their nextPageToken; findSpaceByName caps at 50 matches. account = email of the Google account to use (default: primary).',
     actions: CHAT_ACTIONS,
     inputProps: {
       spaceId: { type: 'string' },
@@ -136,6 +162,14 @@ export const DOMAINS: DomainDef[] = [
       pageSize: { type: 'number', description: 'Maximum spaces, messages, or threads per page' },
       pageToken: { type: 'string', description: 'Continuation token from a previous page' },
       unreadOnly: { type: 'boolean', description: 'Return only unread messages' },
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
+      },
       orderBy: { type: 'string', description: 'Message ordering expression' },
       filter: { type: 'string', description: 'Chat message filter' }
     },
@@ -146,7 +180,7 @@ export const DOMAINS: DomainDef[] = [
     description:
       'Gmail operations. Actions: ' +
       GMAIL_ACTIONS.join(', ') +
-      '. account = email of the Google account to use (default: primary).',
+      '.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).',
     actions: GMAIL_ACTIONS,
     inputProps: {
       query: { type: 'string' },
@@ -160,6 +194,14 @@ export const DOMAINS: DomainDef[] = [
       maxResults: { type: 'number', description: 'Maximum messages returned per page (bounded by Gmail)' },
       pageToken: { type: 'string', description: 'Continuation token from a previous search page' },
       includeSpamTrash: { type: 'boolean', description: 'Include spam and trash in search results' },
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
+      },
       format: { type: 'string', enum: ['minimal', 'full', 'raw', 'metadata'], description: 'Message payload detail' }
     },
     run: gmail
@@ -169,11 +211,19 @@ export const DOMAINS: DomainDef[] = [
     description:
       'Slides operations. Actions: ' +
       SLIDES_ACTIONS.join(', ') +
-      '. account = email of the Google account to use (default: primary).',
+      '.\n\ngetText, getMetadata, getImages and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide or image entries. getSlideThumbnail returns one base64 image and is never cut. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).',
     actions: SLIDES_ACTIONS,
     inputProps: {
       presentationId: { type: 'string' },
       title: { type: 'string' },
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
+      },
       slideId: { type: 'string' },
       text: { type: 'string' }
     },
@@ -205,7 +255,7 @@ export const DOMAINS: DomainDef[] = [
     description:
       'Tasks operations. Actions: ' +
       TASKS_ACTIONS.join(', ') +
-      '. account = email of the Google account to use (default: primary).',
+      '.\n\nlistTasks and listTaskLists are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and page with maxResults and pageToken. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).',
     actions: TASKS_ACTIONS,
     inputProps: {
       taskListId: { type: 'string' },
@@ -213,6 +263,14 @@ export const DOMAINS: DomainDef[] = [
       title: { type: 'string' },
       notes: { type: 'string' },
       due: { type: 'string' },
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
+      },
       maxResults: { type: 'number', description: 'Maximum task lists or tasks per page' },
       pageToken: { type: 'string', description: 'Continuation token from a previous page' }
     },
@@ -223,9 +281,17 @@ export const DOMAINS: DomainDef[] = [
     description:
       'People operations. Actions: ' +
       PEOPLE_ACTIONS.join(', ') +
-      '. account = email of the Google account to use (default: primary).',
+      '.\n\nAll three actions are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), and getUserRelations keeps at most 50 relations. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).',
     actions: PEOPLE_ACTIONS,
     inputProps: {
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
+      },
       resourceName: { type: 'string' }
     },
     run: people
@@ -233,7 +299,7 @@ export const DOMAINS: DomainDef[] = [
   {
     name: 'forms',
     description:
-      'Google Forms operations.\n\nActions (required params -> optional):\n- create (title -> documentTitle)\n- get (formId)\n- batchUpdate (formId, requests)\n- listResponses (formId -> pageSize, pageToken, filter)\n- getResponse (formId, responseId)\n\nQuestions are added with batchUpdate, not create. Responses are read-only (the Forms API cannot write one), and listing or deleting forms goes through the drive tool.\n\naccount = email of the Google account to use (default: primary).',
+      'Google Forms operations.\n\nActions (required params -> optional):\n- create (title -> documentTitle)\n- get (formId)\n- batchUpdate (formId, requests)\n- listResponses (formId -> pageSize, pageToken, filter)\n- getResponse (formId, responseId)\n\nQuestions are added with batchUpdate, not create. Responses are read-only (the Forms API cannot write one), and listing or deleting forms goes through the drive tool.\n\nget, getResponse and listResponses are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload); listResponses pages with pageSize and pageToken.\n\naccount = email of the Google account to use (default: primary).',
     actions: FORMS_ACTIONS,
     inputProps: {
       formId: {
@@ -253,6 +319,14 @@ export const DOMAINS: DomainDef[] = [
       responseId: { type: 'string', description: 'Response ID (for getResponse)' },
       pageSize: { type: 'number', description: 'Maximum responses to return (for listResponses)' },
       pageToken: { type: 'string', description: 'Page token from a previous listResponses call' },
+      max_chars: {
+        type: 'number',
+        description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
+      },
+      full: {
+        type: 'boolean',
+        description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
+      },
       filter: {
         type: 'string',
         description: 'Response filter, e.g. timestamp > 2026-01-01T00:00:00Z (for listResponses)'

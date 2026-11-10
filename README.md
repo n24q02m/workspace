@@ -195,6 +195,29 @@ Questions are added to a form with `forms(action="batchUpdate")`, not at `create
 responses are read-only, because the Forms API cannot write one. Listing or
 deleting forms goes through `drive`.
 
+### Response size
+
+A Google read can return megabytes from one call, so every action whose payload
+can grow is bounded by default:
+
+- 20,000 characters per response. Raise it with `max_chars` (1--100,000), or pass
+  `full: true` for the complete payload. The same envelope `docs` exposes as
+  `limit`/`preview` and `sheets` as `max_chars`/`full`.
+- Listings that page keep their page size (default 20, clamped to 1--100) and
+  always return their `nextPageToken`; listings with no cursor (`getImages`,
+  `findFolder`, `findSpaceByName`, `listCalendars`, `getUserRelations`, free/busy
+  slots, labels) also cap how many items one response carries (50--100).
+- Truncation is never silent. A cut payload carries
+  `_truncation: {truncated, total_characters, returned_characters, omitted_items?, note}`
+  whose `note` reads
+  `[Content truncated: showing <kept> of <total> characters (<omitted> omitted). ...]`.
+  A JSON payload stays parseable, and a pagination cursor is never cut.
+
+```sh
+workspace gmail get --messageId <id> --max_chars 60000 --json   # a longer body
+workspace slides getText --presentationId <id> --full --json     # the whole deck
+```
+
 ## CLI
 
 Every tool is also a shell subcommand, so the same operations work without an MCP

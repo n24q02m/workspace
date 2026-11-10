@@ -1,4 +1,5 @@
 import { SlidesService } from '../../vendored/services/SlidesService.js'
+import { SLIDES_BOUNDS } from './bounds.js'
 import { makeDomainRun } from './factory.js'
 
 export const SLIDES_ACTIONS = [
@@ -22,4 +23,4 @@ export const SLIDES_ACTIONS = [
   'updateShapeProperties',
   'getSlideThumbnail'
 ] as const
-export const slides = makeDomainRun(SlidesService, SLIDES_ACTIONS)
+export const slides = makeDomainRun(SlidesService, SLIDES_ACTIONS, { bounds: SLIDES_BOUNDS })

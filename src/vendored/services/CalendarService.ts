@@ -72,6 +72,8 @@ export interface ListEventsInput {
   timeMax?: string;
   attendeeResponseStatus?: string[];
   eventTypes?: ListEventsEventType[];
+  maxResults?: number;
+  pageToken?: string;
 }
 
 export interface GetEventInput {
@@ -490,10 +492,16 @@ export class CalendarService {
         timeMax,
         singleEvents: true,
         fields:
-          'items(id,summary,start,end,description,htmlLink,attendees,status,eventType,focusTimeProperties,outOfOfficeProperties,workingLocationProperties,attachments(fileId,fileUrl,title,mimeType,iconLink))',
+          'nextPageToken, items(id,summary,start,end,description,htmlLink,attendees,status,eventType,focusTimeProperties,outOfOfficeProperties,workingLocationProperties,attachments(fileId,fileUrl,title,mimeType,iconLink))',
       };
       if (eventTypes && eventTypes.length > 0) {
         listParams.eventTypes = eventTypes;
+      }
+      if (input.maxResults !== undefined) {
+        listParams.maxResults = input.maxResults;
+      }
+      if (input.pageToken !== undefined) {
+        listParams.pageToken = input.pageToken;
       }
       const res = await calendar.events.list(listParams);
 
@@ -525,7 +533,12 @@ export class CalendarService {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify(events),
+            // The cursor travels with the page: a listing that drops it makes
+            // everything past the first page unreachable.
+            text: JSON.stringify({
+              events: events ?? [],
+              nextPageToken: res.data.nextPageToken ?? null,
+            }),
           },
         ],
       };

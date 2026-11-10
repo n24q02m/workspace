@@ -10,6 +10,7 @@ import { logToFile } from '../utils/logger';
 import { extractDocId } from '../utils/IdUtils';
 import { gaxiosOptions } from '../utils/GaxiosConfig';
 import { extractDocumentId as validateAndExtractDocId } from '../utils/validation';
+import { truncationNote } from '../utils/textBounds';
 
 // Field mask for documents.get when reading tab content. Selects only the
 // structural fields we use; broader masks like 'tabs' alone trigger
@@ -31,8 +32,16 @@ export function boundDocsText(text: string, limit: number): BoundedDocsText {
   const totalCharacters = text.length;
   if (totalCharacters <= limit) return { text, truncated: false, totalCharacters };
 
+  // Same marker as the sheets reads and the tool-layer response bounds: the
+  // true size plus the way to fetch the rest. A bare "N omitted" leaves the
+  // caller unable to tell a long document from a runaway one.
+  const note = truncationNote(
+    totalCharacters,
+    limit,
+    `Request a larger limit, up to ${MAX_DOCS_TEXT_LIMIT}.`,
+  );
   return {
-    text: `${text.slice(0, limit)}\n\n[Content truncated: ${totalCharacters - limit} characters omitted. Request a larger limit to continue, up to ${MAX_DOCS_TEXT_LIMIT}.]`,
+    text: `${text.slice(0, limit)}\n\n${note}`,
     truncated: true,
     totalCharacters
   };

@@ -15,8 +15,13 @@ is unparseable or names a file that is not on disk -- an empty list would otherw
 These no longer match gemini-cli-extensions/workspace byte-for-byte. `sync-upstream.mjs` reports them
 as CONFLICT and leaves them alone; whoever syncs merges them by hand:
 
-- src/vendored/services/DriveService.ts — SECURITY: Prevent path traversal in relative localPath
-- src/vendored/services/CalendarService.ts — PERFORMANCE: Using Date.parse() instead of new Date().getTime() skips object allocation and reduces GC pressure
+- src/vendored/services/DocsService.ts — BOUNDS: `getText` caps the returned text
+  (20,000 characters by default, 1–100,000 via `limit`, 2,000 via `preview`) and ends a cut body with the
+  shared truncation marker that names its true size.
+- src/vendored/services/DriveService.ts — SECURITY: Prevent path traversal in relative localPath; BOUNDS:
+  `getComments` takes `pageSize`/`pageToken` and returns `nextPageToken` instead of a bare array that
+  dropped the cursor.
+- src/vendored/services/CalendarService.ts — PERFORMANCE: Using Date.parse() instead of new Date().getTime() skips object allocation and reduces GC pressure; BOUNDS: `listEvents` takes `maxResults`/`pageToken` and returns `{events, nextPageToken}` instead of a bare array that dropped the cursor.
 - src/vendored/utils/MimeHelper.ts — the multipart boundary suffix could be empty
   (`.substring(7)` on a short `Math.random().toString(36)`, e.g. 0.5 -> "0.i"), so two messages
   built in the same millisecond collided on their boundary. Now a randomUUID-derived suffix.
@@ -28,6 +33,8 @@ as CONFLICT and leaves them alone; whoever syncs merges them by hand:
   (`.substring(7)` on a short `Math.random().toString(36)`, e.g. 0.5 -> "0.i"), so two messages
   built in the same millisecond collided on their boundary. Now a randomUUID-derived suffix.
 - src/vendored/utils/validation.ts — optimization: Date.parse vs new Date().getTime()
+- src/vendored/services/ChatService.ts — BOUNDS: `listSpaces` takes `pageSize`/`pageToken` and returns
+  `{spaces, nextPageToken}` instead of a bare array that dropped the cursor.
 
 ## Files that replace an upstream file (ours, never synced)
 
