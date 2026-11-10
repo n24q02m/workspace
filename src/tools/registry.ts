@@ -3,11 +3,14 @@
  * appends 9 more) + 2 infra tools (config, help). TOOLS, RESOURCES, the help
  * topic allowlist, and the CallTool dispatch map are all derived from the
  * single DOMAINS list in ./domains/index.js -- see that file to add a domain.
+ *
+ * The `tools/call` body itself lives in ./dispatch.ts: the CLI tool
+ * subcommands (cli/tools.ts) call the same `dispatchTool`, so a tool's
+ * behaviour cannot differ between MCP and `workspace <tool> <action>`.
  */
 
 import { readFile } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { basename, isAbsolute, join, relative, sep } from 'node:path'
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
   CallToolRequestSchema,
@@ -15,24 +18,10 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema
 } from '@modelcontextprotocol/sdk/types.js'
-import { getState, resolveCredentialState } from '../auth/credential-state.js'
-import { config } from './config.js'
-import type { DomainRunInput } from './domains/factory.js'
-import { DOMAINS, type DomainDef } from './domains/index.js'
-import { aiReadableMessage, findClosestMatch, WorkspaceMCPError } from './helpers/errors.js'
-
-// Tools that work without a configured Google account
-// 'time' is a no-auth domain (local date/time helpers) — exempt from the credential gate.
-const TOKEN_FREE_TOOLS = new Set(['config', 'help', 'time'])
-
-// Get docs directory path - works for both bundled CLI and unbundled code
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-// For bundled CLI: __dirname = /bin/, docs at /build/src/docs/
-// For unbundled: __dirname = /build/src/tools/, docs at /build/src/docs/
-const DOCS_DIR = __dirname.endsWith('bin')
-  ? join(__dirname, '..', 'build', 'src', 'docs')
-  : join(__dirname, '..', 'docs')
+import { DOCS_DIR, dispatchTool, HELP_TOPICS } from './dispatch.js'
+import type { DomainDef } from './domains/index.js'
+import { DOMAINS } from './domains/index.js'
+import { WorkspaceMCPError } from './helpers/errors.js'
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
@@ -53,10 +42,6 @@ const RESOURCES = [
 const PRECOMPUTED_RESOURCES = RESOURCES.map((r) => ({ uri: r.uri, name: r.name, mimeType: 'text/markdown' }))
 const RESOURCE_MAP = new Map(RESOURCES.map((r) => [r.uri, r]))
 const AVAILABLE_RESOURCE_URIS = RESOURCES.map((r) => r.uri).join(', ')
-
-const HELP_TOPICS = [...DOMAINS.map((d) => d.name), 'config', 'overview']
-const VALID_HELP_TOPICS = new Set<string>(HELP_TOPICS)
-const VALID_HELP_TOPICS_STRING = HELP_TOPICS.join(', ')
 
 /**
  * A domain's mega-tool definition, derived from its DomainDef -- action enum
@@ -171,13 +156,6 @@ function toolDefinitions(allowLocalFilesystem: boolean) {
 }
 
 /**
- * Dispatch map for domain mega-tools, keyed by domain name. Each entry
- * returns the MCP CallTool result shape directly (no re-wrapping). Task 7
- * appends 9 more entries to DOMAINS, not here.
- */
-const DOMAIN_MAP = new Map(DOMAINS.map((domain) => [domain.name, domain]))
-
-/**
  * Register all tools with the MCP server. Single-account M1 -- no client factory.
  */
 export function registerTools(
@@ -185,8 +163,6 @@ export function registerTools(
   { allowLocalFilesystem = true }: { allowLocalFilesystem?: boolean } = {}
 ) {
   const tools = toolDefinitions(allowLocalFilesystem)
-  const allToolNames = tools.map((tool) => tool.name)
-  const allToolNamesString = allToolNames.join(', ')
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools
@@ -231,107 +207,6 @@ export function registerTools(
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params
-
-    if (!args) {
-      return {
-        content: [{ type: 'text', text: 'Error: No arguments provided' }],
-        isError: true
-      }
-    }
-
-    // Credential guard. config and help work without a configured Google
-    // account; every domain tool (docs, and the 9 more Task 7 appends)
-    // requires the OAuth flow to have completed at least once.
-    // The state map is per process and per bucket. A fresh process (or a new HTTP user)
-    // starts empty, so re-resolve from the store before refusing. resolveCredentialState
-    // fails closed: a store read error leaves the state at 'awaiting_setup'.
-    if (!TOKEN_FREE_TOOLS.has(name) && getState() !== 'configured') {
-      await resolveCredentialState()
-    }
-    if (!TOKEN_FREE_TOOLS.has(name) && getState() !== 'configured') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: 'Google account not configured. Run `workspace auth` on the host to complete the Google consent, or call config(action="setup_start") for instructions.'
-          }
-        ],
-        isError: true
-      }
-    }
-
-    try {
-      const domain = DOMAIN_MAP.get(name)
-      if (domain) {
-        const action = (args as DomainRunInput).action
-        if (!allowLocalFilesystem && domain.localOnlyActions?.includes(action)) {
-          if (name === 'drive' && action === 'downloadFile') {
-            throw new WorkspaceMCPError(
-              'downloadFile is only available in local stdio mode.',
-              'VALIDATION_ERROR',
-              'Use a local stdio server to download a Drive file to the local filesystem.'
-            )
-          }
-          throw new WorkspaceMCPError(
-            `Action not available in this transport: ${action}`,
-            'VALIDATION_ERROR',
-            'Use an action listed in the tool schema.'
-          )
-        }
-        return await domain.run(args as any)
-      }
-
-      switch (name) {
-        case 'config':
-          return await config(args as any)
-
-        case 'help': {
-          const topic = (args as { topic: string }).topic
-          // Security: validate topic against allowlist to prevent path traversal
-          if (!VALID_HELP_TOPICS.has(topic)) {
-            throw new WorkspaceMCPError(
-              `Invalid topic: ${topic}`,
-              'VALIDATION_ERROR',
-              `Valid topics: ${VALID_HELP_TOPICS_STRING}`
-            )
-          }
-          // Security: basename() ensures we only look for files directly inside
-          // DOCS_DIR, even if the allowlist check above were bypassed.
-          const docFile = `${basename(topic)}.md`
-          const fullPath = join(DOCS_DIR, docFile)
-          const rel = relative(DOCS_DIR, fullPath)
-          if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-            throw new WorkspaceMCPError('Path traversal attempt detected', 'SECURITY_ERROR', 'Invalid topic')
-          }
-
-          try {
-            const content = await readFile(fullPath, 'utf-8')
-            return { content: [{ type: 'text', text: content }] }
-          } catch {
-            throw new WorkspaceMCPError(`Documentation not found for: ${topic}`, 'DOC_NOT_FOUND', 'Check topic')
-          }
-        }
-
-        default: {
-          const closest = findClosestMatch(name, allToolNames)
-          const suggestion = closest ? ` Did you mean '${closest}'?` : ''
-          throw new WorkspaceMCPError(
-            `Unknown tool: ${name}.${suggestion}`,
-            'UNKNOWN_TOOL',
-            `Available tools: ${allToolNamesString}`
-          )
-        }
-      }
-    } catch (error) {
-      const enhancedError =
-        error instanceof WorkspaceMCPError
-          ? error
-          : new WorkspaceMCPError((error as Error).message, 'TOOL_ERROR', 'Check the error details and try again')
-
-      return {
-        content: [{ type: 'text', text: aiReadableMessage(enhancedError) }],
-        isError: true
-      }
-    }
+    return dispatchTool(name, args, { allowLocalFilesystem })
   })
 }

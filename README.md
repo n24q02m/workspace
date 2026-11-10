@@ -57,6 +57,7 @@
 - [Install](#install)
 - [Remote (HTTP mode)](#remote-http-mode)
 - [Tools](#tools)
+- [CLI](#cli)
 - [Quick start](#quick-start)
 - [Multi-account](#multi-account)
 - [Documentation](#documentation)
@@ -192,6 +193,46 @@ One composite tool per Workspace domain, plus `config` and `help`:
 Questions are added to a form with `forms(action="batchUpdate")`, not at `create`;
 responses are read-only, because the Forms API cannot write one. Listing or
 deleting forms goes through `drive`.
+
+## CLI
+
+Every tool is also a shell subcommand, so the same operations work without an MCP
+client. `workspace <tool> <action>` turns those parameters into the tool's input
+object and calls the same handler the server registers -- one dispatch, two front
+doors, so credential gating and validation behave identically.
+
+```sh
+workspace <tool> <action> [--param <value>]... [--json]
+```
+
+`--json` prints one envelope on stdout -- `{"tool", "action", "result"}`, where
+`result` is the tool's own payload (parsed when the tool emits JSON, the raw text
+otherwise). Without it you get the tool's text as-is. A tool failure prints to
+stderr and exits 1; argv the CLI cannot parse exits 2. `workspace --help` lists the
+tool subcommands and the operator commands (`auth`, `config`, `status`, `logout`,
+`doctor`, `token`) separately, and `workspace <tool> --help` prints that tool's
+actions and options.
+
+| Group | Example |
+| --- | --- |
+| `docs` | `workspace docs getText --documentId <document-id> --limit 2000` |
+| `drive` | `workspace drive search --query "name contains 'Q3 report'" --pageSize 5` |
+| `calendar` | `workspace calendar listCalendars --json` |
+| `chat` | `workspace chat listSpaces --json` |
+| `gmail` | `workspace gmail search --query "is:unread" --maxResults 5 --json` |
+| `sheets` | `workspace sheets getRange --spreadsheetId <spreadsheet-id> --range "Sheet1!A1:C10"` |
+| `slides` | `workspace slides getMetadata --presentationId <presentation-id>` |
+| `tasks` | `workspace tasks listTasks --taskListId <task-list-id> --maxResults 20` |
+| `people` | `workspace people getMe --json` |
+| `forms` | `workspace forms listResponses --formId <form-id> --pageSize 10` |
+| `time` | `workspace time getCurrentTime --json` |
+| `help` | `workspace help gmail` |
+
+Values are coerced from the tool's own schema: `--maxResults 5` is a number,
+`--includeSpamTrash` (also `--includeSpamTrash true`, or `--no-includeSpamTrash`)
+is a boolean, and `--labelIds INBOX,IMPORTANT` (or a JSON array) is a list. Every
+domain accepts `--account <email>` to choose the Google account, exactly like the
+tool's `account` parameter.
 
 ## Quick start
 

@@ -31,6 +31,7 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 import { getState, resolveCredentialState } from './auth/credential-state.js'
 import { runOAuthSetup } from './auth/oauth-setup.js'
 import { bootstrap, getTransportMode, isMain, runCli, startServer } from './main.js'
+import { DOMAINS } from './tools/domains/index.js'
 import { registerTools } from './tools/registry.js'
 import { startHttp } from './transports/http.js'
 
@@ -244,6 +245,39 @@ describe('runCli', () => {
       expect(errorSpy).toHaveBeenCalledWith('relay was removed; run `workspace auth` (see README)')
     } finally {
       errorSpy.mockRestore()
+    }
+  })
+
+  it('registers one subcommand per MCP tool and leaves the operator commands to hull', async () => {
+    vi.mocked(buildCli).mockReturnValue(vi.fn().mockResolvedValue(0) as never)
+
+    await runCli(['docs'])
+
+    const options = vi.mocked(buildCli).mock.calls.at(-1)?.[1] as unknown as {
+      extra: Record<string, (argv: string[]) => Promise<number>>
+    }
+    for (const domain of DOMAINS) expect(typeof options.extra[domain.name]).toBe('function')
+    expect(typeof options.extra.help).toBe('function')
+    for (const operator of ['config', 'status', 'logout', 'doctor', 'token']) {
+      expect(options.extra[operator]).toBeUndefined()
+    }
+  })
+
+  it('prints the grouped tool/operator surface for --help without building the CLI', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    const originalExitCode = process.exitCode
+    const buildCallsBefore = vi.mocked(buildCli).mock.calls.length
+    try {
+      await runCli(['--help'])
+
+      expect(vi.mocked(buildCli).mock.calls.length).toBe(buildCallsBefore)
+      const printed = logSpy.mock.calls.map((call) => call.join(' ')).join('\n')
+      expect(printed).toContain('tools (each is an MCP tool; the CLI runs the same handler):')
+      expect(printed).toContain('operator commands (not tools):')
+      expect(process.exitCode).toBe(0)
+    } finally {
+      process.exitCode = originalExitCode
+      logSpy.mockRestore()
     }
   })
 })

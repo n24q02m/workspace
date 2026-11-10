@@ -29,7 +29,11 @@ The MCP registry exposes one composite tool per domain plus `config` and `help`:
 | `config` | status, setup_start, setup_reset, setup_complete, set, account_add, account_list, account_remove, account_set_default | Account lists are per caller and bounded by the configured credential store. |
 | `help` | topic documentation | Reads one allowlisted Markdown topic at a time. |
 
-The authoritative runtime registry is `src/tools/domains/index.ts`; `src/tools/registry.ts` derives tool definitions, help topics, resources, and dispatch from that list. Do not add a second inventory.
+The authoritative runtime registry is `src/tools/domains/index.ts`; `src/tools/registry.ts` derives tool definitions, help topics, and resources from that list, and `src/cli/tools.ts` derives one CLI subcommand per tool from it. Both front doors call the same dispatch in `src/tools/dispatch.ts` (credential gate, domain validation, error wrapping), so a tool cannot behave differently over MCP and over the CLI. Do not add a second inventory or a second dispatch.
+
+### CLI surface
+
+`workspace <tool> <action> [--param <value>]... [--json]` runs any of those tools from a terminal without an MCP client. `--json` prints `{"tool", "action", "result"}` on stdout; a tool failure goes to stderr with exit 1, unparseable argv with exit 2. Operator commands (`auth`, `config`, `status`, `logout`, `doctor`, `token`, and the removed `relay`) stay hull built-ins and are listed separately from the tool subcommands by `workspace --help`. The CLI never starts a server for a tool call, and it resolves credentials through the same store (`STORE_PLUGIN`) the server uses.
 
 ## Build, test, and run
 
@@ -41,6 +45,8 @@ bun run build
 ```
 
 `bun run type-check` checks the server TypeScript project. `bun run build` produces `build/` and `bin/cli.mjs`. CI is the authoritative source for hosted checks; local commands are source evidence only.
+
+Smoke the CLI surface without Google credentials: `node bin/cli.mjs time getCurrentTime --json` (the `time` tool needs no account). `src/cli/tools.integration.test.ts` covers that path with the real dispatch, so the suite fails if the CLI ever stops reaching it.
 
 For local stdio operation, provide `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` for a Desktop OAuth client. For HTTP operation, provide the Web client pair, `CREDENTIAL_SECRET`, and `WORKSPACE_USERS_FILE`; set `HOST=0.0.0.0` in a container. Never commit these values.
 
