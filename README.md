@@ -37,7 +37,7 @@
 | [better-notion-mcp](https://github.com/n24q02m/better-notion-mcp) | Markdown-first Notion for AI agents -- pages, databases, blocks, and comments... | MCP |
 | [better-semantic-release](https://github.com/n24q02m/better-semantic-release) | Drop-in python-semantic-release fork with built-in release-safety guards (orp... | Tooling |
 | [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) | Telegram for AI agents -- messages, chats, media, and contacts across both bo... | MCP |
-| [better-workspace-mcp](https://github.com/n24q02m/better-workspace-mcp) | Google Workspace MCP server (Docs/Drive/Calendar/Gmail/Sheets/Slides/Tasks/Ch... | MCP |
+| [workspace](https://github.com/n24q02m/workspace) | Google Workspace MCP server (Docs/Drive/Calendar/Gmail/Sheets/Slides/Tasks/Ch... | MCP |
 | [claude-plugins](https://github.com/n24q02m/claude-plugins) | Claude Code plugin marketplace for the n24q02m MCP servers -- install web sea... | Marketplace |
 | [imagine-mcp](https://github.com/n24q02m/imagine-mcp) | Image and video understanding + generation for AI agents -- across Gemini, Op... | MCP |
 | [jules-task-archiver](https://github.com/n24q02m/jules-task-archiver) | Chrome Extension for bulk operations on Jules tasks via batchexecute API -- a... | Tooling |
@@ -111,7 +111,7 @@ The same server can also serve several people over HTTP -- see
 **Install with an AI agent** -- paste this to your AI coding agent:
 
 > Install MCP server `workspace` following the steps at
-> https://raw.githubusercontent.com/n24q02m/claude-plugins/main/plugins/better-workspace-mcp/setup-with-agent.md
+> https://raw.githubusercontent.com/n24q02m/claude-plugins/main/plugins/workspace/setup-with-agent.md
 
 ## Remote (HTTP mode)
 
