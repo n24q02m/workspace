@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.n24q02m/better-workspace-mcp",
+  "name": "io.github.n24q02m/workspace",
   "description": "Google Workspace MCP — Docs, Drive, Calendar, Gmail, Sheets, Slides, Tasks, Chat, People, Forms",
   "version": "0.7.0-beta.1",
   "repository": {

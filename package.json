@@ -1,6 +1,6 @@
 {
   "name": "@n24q02m/workspace",
-  "mcpName": "io.github.n24q02m/better-workspace-mcp",
+  "mcpName": "io.github.n24q02m/workspace",
   "version": "0.7.0-beta.1",
   "license": "Apache-2.0",
   "type": "module",

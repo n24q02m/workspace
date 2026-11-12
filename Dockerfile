@@ -32,7 +32,7 @@ RUN npx tsc -build && node scripts/build-cli.js
 FROM node:24.21.0-alpine@sha256:be80f76cf40ec8e42b9bec49f60a55e0660f30af58d3e5a25530785b30ea67e2 AS base
 
 LABEL org.opencontainers.image.source="https://github.com/n24q02m/workspace"
-LABEL io.modelcontextprotocol.server.name="io.github.n24q02m/better-workspace-mcp"
+LABEL io.modelcontextprotocol.server.name="io.github.n24q02m/workspace"
 
 # Copy built package from builder stage
 COPY --from=builder /app/build /usr/local/lib/node_modules/@n24q02m/workspace/build
