@@ -88,9 +88,11 @@ stdio, add it to your MCP client config:
 ```
 
 The package is `@n24q02m/workspace` (formerly `@n24q02m/better-workspace-mcp`;
-old package receives one final release then freezes). The MCP Registry id stays
-`io.github.n24q02m/better-workspace-mcp`, and the legacy `better-workspace-mcp`
-command is kept as an alias of `workspace`.
+old package receives one final release then freezes). The MCP Registry id is now
+`io.github.n24q02m/workspace`; the entry published under
+`io.github.n24q02m/better-workspace-mcp` stays on the registry as a frozen
+historical release, and the legacy `better-workspace-mcp` command is kept as an
+alias of `workspace`.
 
 Those two values come from an OAuth 2.0 client of type **Desktop app**, created in
 the [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
