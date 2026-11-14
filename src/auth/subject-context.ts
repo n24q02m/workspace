@@ -14,3 +14,13 @@ export function currentSubject(): string | undefined {
   const user = currentUser()
   return user.mode === 'no-auth' ? undefined : user.namespace
 }
+
+/**
+ * The host command that stores a Google account where the current caller reads it:
+ * a multi-user caller's account lives under its namespace, so a plain `workspace auth`
+ * would land in the stdio store instead.
+ */
+export function hostAuthCommand(): string {
+  const sub = currentSubject()
+  return sub === undefined ? 'workspace auth' : `workspace auth --user ${sub}`
+}

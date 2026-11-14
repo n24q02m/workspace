@@ -8,7 +8,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { startAddAccount } from '../auth/add-account.js'
 import { getAuth, getState, resetState, resolveCredentialState } from '../auth/credential-state.js'
-import { currentSubject } from '../auth/subject-context.js'
+import { currentSubject, hostAuthCommand } from '../auth/subject-context.js'
 import { WorkspaceMCPError, withErrorHandling } from './helpers/errors.js'
 
 /**
@@ -83,7 +83,7 @@ export function config(input: ConfigInput): Promise<ConfigResult> {
 
       case 'setup_start':
         return textResult(
-          'Run `workspace auth` on the host to start the Google consent flow, then retry the tool. Stdio servers start this flow automatically on first run.'
+          `Run \`${hostAuthCommand()}\` on the host to start the Google consent flow, then retry the tool. Stdio servers start this flow automatically on first run.`
         )
 
       case 'setup_reset':
