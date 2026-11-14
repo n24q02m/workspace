@@ -4,7 +4,7 @@
 
 `workspace` is a TypeScript MCP server for Google Workspace. The operational surface is this repository and its published package `@n24q02m/workspace` (formerly `@n24q02m/better-workspace-mcp`). OCI VM infrastructure, user-owned OMP profiles, scheduled synchronization, and stable-promotion decisions are outside this pack.
 
-**Version: 0.7.0** -- the `version` field of `package.json`, which is the version of the published package. Re-read that field before relying on this line, because a release moves it.
+**Version:** the `version` field of `package.json` is the only source, and it is the version of the published package (`npm view @n24q02m/workspace version`). This file does not repeat the number, so a release never leaves it stale.
 
 The server supports two transports:
 
