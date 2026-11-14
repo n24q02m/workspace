@@ -1,7 +1,7 @@
 import { localAuthContext, runWithAuthContext } from '@n24q02m/hull/token-auth'
 import { describe, expect, it } from 'vitest'
 import { currentAccount, runWithAccount } from './account-context.js'
-import { currentSubject } from './subject-context.js'
+import { currentSubject, hostAuthCommand } from './subject-context.js'
 
 function multiUser(namespace: string) {
   return runWithAuthContext({ ...localAuthContext(), uid: namespace, namespace, mode: 'multi' }, async () =>
@@ -10,6 +10,18 @@ function multiUser(namespace: string) {
 }
 
 describe('subject-context', () => {
+  it('points a stdio caller at the plain host auth command', () => {
+    expect(hostAuthCommand()).toBe('workspace auth')
+  })
+
+  it('points a multi-user caller at the host auth command for its own namespace', async () => {
+    const hint = await runWithAuthContext(
+      { ...localAuthContext(), uid: 'sub-1', namespace: 'sub-1', mode: 'multi' },
+      async () => hostAuthCommand()
+    )
+    expect(hint).toBe('workspace auth --user sub-1')
+  })
+
   it('is undefined in the local no-auth identity (stdio)', () => {
     expect(currentSubject()).toBeUndefined()
   })

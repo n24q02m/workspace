@@ -1,5 +1,6 @@
 import { type Auth, google } from 'googleapis'
 import { type AccountRecord, AccountStore, emailFromIdToken } from './account-store.js'
+import { hostAuthCommand } from './subject-context.js'
 
 export interface GoogleTokens {
   access_token: string
@@ -143,7 +144,7 @@ export class WorkspaceAuth {
       throw new Error(`Account ${account.trim().toLowerCase()} is not configured.${known}`)
     }
     throw new Error(
-      'Google account not configured. Run `workspace auth` on the host to complete the Google consent (see setup docs).'
+      `Google account not configured. Run \`${hostAuthCommand()}\` on the host to complete the Google consent (see setup docs).`
     )
   }
 }

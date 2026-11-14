@@ -84,6 +84,12 @@ describe('config', () => {
 
       expect(textOf(result)).toContain('workspace auth')
     })
+
+    it('tells an HTTP caller to run workspace auth for its own namespace', async () => {
+      const result = await asSub('sub-alice', () => config({ action: 'setup_start' }))
+
+      expect(textOf(result)).toContain('`workspace auth --user sub-alice`')
+    })
   })
 
   describe('setup_reset action', () => {

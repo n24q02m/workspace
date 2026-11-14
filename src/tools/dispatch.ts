@@ -14,6 +14,7 @@ import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { getState, resolveCredentialState } from '../auth/credential-state.js'
+import { hostAuthCommand } from '../auth/subject-context.js'
 import { type ConfigInput, config } from './config.js'
 import type { DomainRunInput } from './domains/factory.js'
 import { DOMAINS } from './domains/index.js'
@@ -95,7 +96,7 @@ export async function dispatchTool(
   }
   if (TOKEN_FREE_TOOLS[name] !== true && getState() !== 'configured') {
     return errorResult(
-      'Google account not configured. Run `workspace auth` on the host to complete the Google consent, or call config(action="setup_start") for instructions.'
+      `Google account not configured. Run \`${hostAuthCommand()}\` on the host to complete the Google consent, or call config(action="setup_start") for instructions.`
     )
   }
 

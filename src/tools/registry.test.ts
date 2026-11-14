@@ -52,6 +52,7 @@ vi.mock('node:fs/promises', () => ({
 import { readFile } from 'node:fs/promises'
 import { relative, sep } from 'node:path'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { localAuthContext, runWithAuthContext } from '@n24q02m/hull/token-auth'
 import { getState } from '../auth/credential-state.js'
 import { config } from './config.js'
 import { docs } from './domains/docs.js'
@@ -241,6 +242,20 @@ describe('registerTools', () => {
       expect(result.isError).toBe(true)
       expect(result.content[0].text).toContain('Google account not configured')
       expect(docs).not.toHaveBeenCalled()
+    })
+
+    it('points an HTTP caller blocked by the credential guard at its own namespace', async () => {
+      vi.mocked(getState).mockReturnValue('awaiting_setup')
+      const handler = getHandler(server, 'tools/call')
+
+      const result = await runWithAuthContext(
+        { ...localAuthContext(), uid: 'sub-bob', namespace: 'sub-bob', mode: 'multi' },
+        () =>
+          handler({ method: 'tools/call', params: { name: 'docs', arguments: { action: 'getText', documentId: 'd' } } })
+      )
+
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('Run `workspace auth --user sub-bob` on the host')
     })
 
     it('allows config and help through the credential guard when not configured', async () => {
