@@ -73,6 +73,11 @@ jobs:
     name: Lint, Test & Build
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      # The Codecov upload authenticates with this job's OIDC token.
+      id-token: write
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -105,13 +110,18 @@ jobs:
       # coverage.thresholds, so a coverage regression fails this step.
       - name: Run tests with coverage
         run: bun run test:coverage
+      # Codecov refuses a tokenless upload for the default branch, and no upload token
+      # is stored, so the upload authenticates with OIDC and fails the job when Codecov
+      # refuses it. Pull requests skip it: a fork or Dependabot run cannot always mint
+      # an OIDC token, and the required check must not depend on Codecov being reachable.
       - name: Upload coverage to Codecov
         if: github.event_name == 'push'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           # CUSTOMIZE: Coverage file path
           files: coverage/lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
+          fail_ci_if_error: true
 
   # ============================================================================
   # Dependency Review
