@@ -9,6 +9,8 @@ vi.mock('../tools/dispatch.js', () => ({
 }))
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import { buildCli } from '@n24q02m/hull'
+import { SERVER_NAME, STORE_PLUGIN } from '../constants.js'
 import type * as DispatchModule from '../tools/dispatch.js'
 import { dispatchTool } from '../tools/dispatch.js'
 import { DOMAINS } from '../tools/domains/index.js'
@@ -476,5 +478,27 @@ describe('help', () => {
     // The alias is a tool subcommand; the plain name belongs to the operator list.
     expect(text).toMatch(/^ {2}config-tool +Manage server configuration/m)
     expect(text).toMatch(/^ {2}config +stored credential state: .*\(MCP `config` tool: `config-tool`\)$/m)
+  })
+
+  it('does not advertise `relay`, which no layer of the console script routes', () => {
+    expect(cliHelpText()).not.toMatch(/\brelay\b/)
+  })
+
+  // The operator list in `--help` must name what the console script really
+  // routes: hull's reserved built-ins plus this server's own `auth`. Reading the
+  // built-ins from hull's unknown-subcommand error keeps this test in step with
+  // the hull version installed, in both directions.
+  it('lists exactly the hull built-ins plus `auth` as operator commands', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const run = buildCli(SERVER_NAME, { serve: () => 0, pluginName: STORE_PLUGIN })
+      expect(await run(['no-such-subcommand'])).toBe(2)
+      const printed = errorSpy.mock.calls.map((call) => call.join(' ')).join('\n')
+      const builtIns = /expected one of: (.+)\)$/.exec(printed)?.[1]?.split(', ')
+      expect(builtIns).toBeDefined()
+      expect(OPERATOR_COMMANDS.map((command) => command.name).sort()).toEqual([...(builtIns ?? []), 'auth'].sort())
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 })
