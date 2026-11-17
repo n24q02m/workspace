@@ -137,7 +137,7 @@ function infraSpec(subcommand: string, tool: string): ToolSpec {
   }
 }
 
-/** Operator commands: this server's `auth` and `relay` plus hull's built-ins. */
+/** Operator commands: this server's `auth` plus hull's built-ins. */
 export const OPERATOR_COMMANDS: ReadonlyArray<{ name: string; description: string }> = [
   { name: 'auth', description: 'add a Google account on the host (`--user <namespace>` for HTTP mode)' },
   {
@@ -147,8 +147,7 @@ export const OPERATOR_COMMANDS: ReadonlyArray<{ name: string; description: strin
   { name: 'status', description: 'alias of `config status`' },
   { name: 'logout', description: 'alias of `config delete`' },
   { name: 'doctor', description: 'environment and credential-backend checks' },
-  { name: 'token', description: 'bearer-token helpers for HTTP mode' },
-  { name: 'relay', description: 'removed; prints a pointer to `auth`' }
+  { name: 'token', description: 'bearer-token helpers for HTTP mode' }
 ]
 
 /** Domain tools, `help`, and one subcommand per alias -- the whole subcommand surface. */
