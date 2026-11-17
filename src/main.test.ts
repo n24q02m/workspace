@@ -246,17 +246,25 @@ describe('runCli', () => {
     }
   })
 
-  it('refuses the removed hull relay built-in with exit 2 and a pointer to auth', async () => {
-    vi.mocked(buildCli).mockReturnValue(vi.fn().mockResolvedValue(0) as never)
+  // hull 0.8 has no `relay` built-in, so the console script must not route that
+  // name anywhere: it falls through to hull's unknown-subcommand error (exit 2),
+  // and the subcommand list in that error does not offer it.
+  it('leaves `relay` to the unknown-subcommand path of hull (exit 2)', async () => {
+    const hull = await vi.importActual<typeof Hull>('@n24q02m/hull')
+    vi.mocked(buildCli).mockImplementationOnce(hull.buildCli)
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const originalExitCode = process.exitCode
     try {
       await runCli(['relay'])
-      const options = vi.mocked(buildCli).mock.calls.at(-1)?.[1] as unknown as {
-        extra: { relay: () => Promise<number> }
-      }
-      expect(await options.extra.relay()).toBe(2)
-      expect(errorSpy).toHaveBeenCalledWith('relay was removed; run `workspace auth` (see README)')
+
+      expect(process.exitCode).toBe(2)
+      const printed = errorSpy.mock.calls.map((call) => call.join(' ')).join('\n')
+      expect(printed).toMatch(/^workspace: unknown subcommand 'relay' \(expected one of: .+\)$/)
+      const listed = /expected one of: (.+)\)$/.exec(printed)?.[1]?.split(', ') ?? []
+      expect(listed).toContain('auth')
+      expect(listed).not.toContain('relay')
     } finally {
+      process.exitCode = originalExitCode
       errorSpy.mockRestore()
     }
   })

@@ -135,11 +135,6 @@ export async function runCli(argv: string[]): Promise<void> {
     serve: () => bootstrap(),
     extra: {
       auth: authCommand,
-      // Hull's built-in `relay` is not part of this server; refuse it with a pointer to `auth`.
-      relay: async () => {
-        console.error('relay was removed; run `workspace auth` (see README)')
-        return 2
-      },
       // One subcommand per MCP tool; each runs the same handler the server registers.
       ...toolCommands()
     },
