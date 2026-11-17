@@ -85,6 +85,18 @@ describe('startLoopbackConsent', () => {
     expect(tokenFetch.mock.calls.some(([input]) => String(input).startsWith(GOOGLE_TOKEN_URL))).toBe(false)
   })
 
+  it('rejects a callback that carries no state at all, without exchanging the code', async () => {
+    const tokenFetch = stubTokenEndpoint(() => new Response('{}', { status: 200 }))
+    const { handle, onTokens } = await start()
+
+    const res = await realFetch(`${handle.url}callback?code=x`)
+
+    expect(res.status).toBe(400)
+    expect(await res.text()).toContain('did not match this session')
+    expect(onTokens).not.toHaveBeenCalled()
+    expect(tokenFetch.mock.calls.some(([input]) => String(input).startsWith(GOOGLE_TOKEN_URL))).toBe(false)
+  })
+
   it('refuses a callback that reports a Google error', async () => {
     const { handle, onTokens } = await start()
     const first = await realFetch(handle.url, { redirect: 'manual' })
@@ -134,6 +146,24 @@ describe('startLoopbackConsent', () => {
     expect(onTokens).not.toHaveBeenCalled()
   })
 
+  it('answers with a generic failure page when onTokens throws something that is not an Error', async () => {
+    stubTokenEndpoint(
+      () => new Response(JSON.stringify({ access_token: 'fake-token-value', id_token: idToken }), { status: 200 })
+    )
+    const onTokens = vi.fn(async () => {
+      throw 'store unavailable'
+    })
+    const { handle } = await start(onTokens)
+    const first = await realFetch(handle.url, { redirect: 'manual' })
+    const state = stateFrom(first.headers.get('location'))
+
+    const res = await realFetch(`${handle.url}callback?state=${state}&code=auth-code`)
+
+    expect(res.status).toBe(500)
+    expect(await res.text()).toContain('<p>Authorization failed.</p>')
+    expect(onTokens).toHaveBeenCalledTimes(1)
+  })
+
   it('answers unknown paths with 404 and non-GET methods with 405', async () => {
     const { handle } = await start()
     expect((await realFetch(`${handle.url}nope`)).status).toBe(404)
@@ -151,6 +181,21 @@ describe('startLoopbackConsent', () => {
     expect(reply).toContain('Unexpected error.')
     expect(consoleError).toHaveBeenCalledWith('[workspace] consent request failed:', expect.any(TypeError))
     expect((await realFetch(`${handle.url}nope`)).status).toBe(404)
+  })
+})
+
+describe('startLoopbackConsent close()', () => {
+  it('resolves once and rejects a second close of the same listener', async () => {
+    // Not pushed to `handles`: this test closes the listener itself.
+    const handle = await startLoopbackConsent({
+      clientId: 'cid',
+      clientSecret: 'test-client-secret',
+      scopes: ['openid'],
+      onTokens: async () => {}
+    })
+
+    await expect(handle.close()).resolves.toBeUndefined()
+    await expect(handle.close()).rejects.toMatchObject({ code: 'ERR_SERVER_NOT_RUNNING' })
   })
 })
 

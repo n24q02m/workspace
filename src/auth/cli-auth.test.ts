@@ -72,6 +72,14 @@ describe('authCommand without --user', () => {
     expect(stderr.join('')).toContain('auth failed: boom')
     expect(stdout.join('')).toBe('')
   })
+
+  it('exits 1 and prints a non-Error consent failure as its string form', async () => {
+    startAddAccountMock.mockRejectedValue('loopback port unavailable')
+
+    await expect(authCommand([])).resolves.toBe(1)
+    expect(stderr.join('')).toContain('auth failed: loopback port unavailable\n')
+    expect(stdout.join('')).toBe('')
+  })
 })
 
 describe('authCommand --user', () => {

@@ -355,6 +355,17 @@ describe('registerTools', () => {
       expect(result.content[0].text).toContain('Valid topics:')
     })
 
+    it('errors for a help call without a topic, before reading any doc file', async () => {
+      const handler = getHandler(server, 'tools/call')
+
+      const result = await handler({ method: 'tools/call', params: { name: 'help', arguments: {} } })
+
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('Error: help requires a topic')
+      expect(result.content[0].text).toContain('Valid topics:')
+      expect(readFile).not.toHaveBeenCalled()
+    })
+
     it('errors when the help doc file is missing', async () => {
       vi.mocked(readFile).mockRejectedValueOnce(new Error('ENOENT'))
       const handler = getHandler(server, 'tools/call')

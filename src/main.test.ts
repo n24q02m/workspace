@@ -191,6 +191,15 @@ describe('bootstrap', () => {
     )
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
+
+  it('reports a non-Error rejection as its string form and still exits with code 1', async () => {
+    vi.mocked(startHttp).mockRejectedValue('listen EADDRINUSE')
+
+    await bootstrap('http')
+
+    expect(errorSpy).toHaveBeenCalledWith('Failed to start server:', 'listen EADDRINUSE')
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
 })
 
 describe('isMain', () => {
@@ -217,6 +226,11 @@ describe('isMain', () => {
 
   it('returns false when the entry path cannot be resolved', () => {
     process.argv = ['node', join(process.cwd(), 'does-not-exist.js')]
+    expect(isMain(import.meta.url)).toBe(false)
+  })
+
+  it('returns false when there is no entry script (for example `node -e` or a REPL)', () => {
+    process.argv = ['node']
     expect(isMain(import.meta.url)).toBe(false)
   })
 })

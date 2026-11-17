@@ -17,9 +17,8 @@ export default defineConfig({
       // coverage target -- our code is src/tools/** and src/auth/**.
       exclude: ['node_modules/', 'build/', 'bin/', 'src/vendored/**'],
       // Global (aggregate) gate over our code -- fails `test:coverage` on
-      // regression. branches sits at 90 (not 95) because of a couple of
-      // pre-existing, low-value gaps (registry.ts:32, errors.ts:30,217).
-      thresholds: { lines: 95, functions: 95, branches: 90, statements: 95 }
+      // regression.
+      thresholds: { lines: 95, functions: 95, branches: 95, statements: 95 }
     }
   }
 })

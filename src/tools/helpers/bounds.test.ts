@@ -248,6 +248,45 @@ describe('boundResponseText', () => {
     expect(parsed._truncation.note).toContain(`of ${text.length} characters`)
   })
 
+  it('keeps a payload field already named `_truncation` and puts the marker beside it', () => {
+    const payload = {
+      _truncation: 'set by the API',
+      comments: Array.from({ length: 120 }, (_, i) => ({ id: `c${i}` }))
+    }
+
+    const bounded = boundResponseText(JSON.stringify(payload), budgetOf({ items: 50 }), HINT)
+    const parsed = JSON.parse(bounded.text)
+
+    expect(bounded.truncated).toBe(true)
+    expect(parsed._truncation).toBe('set by the API')
+    expect(parsed.comments).toHaveLength(50)
+    expect(parsed._response_truncation.omitted_items).toEqual([{ path: '$.comments', returned: 50, total: 120 }])
+  })
+
+  it('keeps a top-level array valid JSON when even an empty `items` cannot fit the budget', () => {
+    const text = JSON.stringify(Array.from({ length: 120 }, (_, i) => ({ id: `s${i}` })))
+
+    const bounded = boundResponseText(text, resolveResponseBudget({ max_chars: 1 }), HINT)
+    const parsed = JSON.parse(bounded.text)
+
+    // Only the marker is carried: it still names the true size and the list cut.
+    expect(bounded.truncated).toBe(true)
+    expect(parsed.items).toBeUndefined()
+    expect(parsed._truncation.total_characters).toBe(text.length)
+    expect(parsed._truncation.omitted_items).toEqual([{ path: '$', returned: 0, total: 120 }])
+  })
+
+  it('falls back to a plain-text cut for an empty JSON object over the budget', () => {
+    // No root entry to carry, so there is no smaller JSON to return.
+    const bounded = boundResponseText('{}', resolveResponseBudget({ max_chars: 1 }), HINT)
+
+    expect(bounded).toEqual({
+      text: `{\n\n${truncationNote(2, 1, HINT)}`,
+      truncated: true,
+      totalCharacters: 2
+    })
+  })
+
   it('hard-cuts text that is not JSON', () => {
     const text = `not json ${'n'.repeat(30_000)}`
 

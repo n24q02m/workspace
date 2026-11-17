@@ -106,6 +106,26 @@ describe('AccountStore', () => {
     expect(await store.remove('ghost@example.com')).toEqual({ removed: false, newPrimary: 'one@example.com' })
   })
 
+  it('reports removed:false with no primary when nothing is stored', async () => {
+    const store = new AccountStore()
+    expect(await store.remove('ghost@example.com')).toEqual({ removed: false, newPrimary: null })
+    expect(await store.load()).toBeNull()
+  })
+
+  it('treats a stored blob that is neither the flat M1 shape nor a v2 blob as no accounts', async () => {
+    // A newer layout, or a v2 blob with its accounts map missing, is not read as
+    // accounts: guessing at it could act on the wrong mailbox.
+    for (const blob of [
+      { version: 3, accounts: { 'one@example.com': REC }, primary: 'one@example.com' },
+      { version: 2, primary: 'one@example.com' }
+    ]) {
+      await new PerPluginStore(STORE_PLUGIN).save(blob)
+      const store = new AccountStore()
+      expect(await store.load()).toBeNull()
+      expect(await store.list()).toEqual({ accounts: [], primary: null })
+    }
+  })
+
   it('refuses to set primary to an unknown account', async () => {
     const store = new AccountStore()
     await store.put('one@example.com', REC)

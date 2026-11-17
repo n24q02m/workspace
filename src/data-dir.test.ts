@@ -1,17 +1,19 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { dataDir, PerPluginStore } from '@n24q02m/hull/storage'
-import { afterEach, describe, expect, it } from 'vitest'
-import { STORE_PLUGIN } from './constants.js'
+import { dataDir, PerPluginStore, setHomeDirForTesting } from '@n24q02m/hull/storage'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { LEGACY_STORE_PLUGIN, STORE_PLUGIN } from './constants.js'
 import {
   applyDataDirOverride,
   DATA_DIR_ENV,
   DATA_DIR_NAME,
   DataDirEscapeError,
+  prepareDataDir,
   resolveBaseDir,
   resolveDataDir
 } from './data-dir.js'
+import { resetStoreMigrationForTesting } from './data-dir-migration.js'
 
 // Platform-neutral absolute home: `resolve` makes it absolute on Windows too.
 const HOME = resolve('/', 'home', 'user')
@@ -91,5 +93,32 @@ describe('applyDataDirOverride', () => {
     const before = dataDir(STORE_PLUGIN)
     expect(applyDataDirOverride({})).toBeNull()
     expect(dataDir(STORE_PLUGIN)).toBe(before)
+  })
+})
+
+describe('prepareDataDir', () => {
+  it('puts WORKSPACE_DATA_DIR in force before copying a pre-rename store forward', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'data-dir-prepare-'))
+    const payload = { access_token: 'old-access-token', refresh_token: 'old-refresh-token' }
+    try {
+      // A store an earlier release wrote under the override base.
+      setHomeDirForTesting(base)
+      await new PerPluginStore(LEGACY_STORE_PLUGIN).save(payload)
+      setHomeDirForTesting(null)
+      resetStoreMigrationForTesting()
+      vi.stubEnv(DATA_DIR_ENV, base)
+
+      // No argument: startup reads the process environment.
+      const report = await prepareDataDir()
+
+      expect(report.migrated).toEqual([{ source: join(base, `.${LEGACY_STORE_PLUGIN}`), sub: null }])
+      expect(existsSync(join(base, DATA_DIR_NAME, 'config.json'))).toBe(true)
+      expect(await new PerPluginStore(STORE_PLUGIN).load()).toEqual(payload)
+    } finally {
+      vi.unstubAllEnvs()
+      resetStoreMigrationForTesting()
+      setHomeDirForTesting(null)
+      rmSync(base, { recursive: true, force: true })
+    }
   })
 })
