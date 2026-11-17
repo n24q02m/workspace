@@ -287,4 +287,15 @@ describe('findClosestMatch', () => {
   it('should return null when nothing is close enough', () => {
     expect(findClosestMatch('xyz', ['abc', 'def'])).toBeNull()
   })
+
+  it('should skip a one-character option that is not a prefix and keep scanning', () => {
+    expect(findClosestMatch('xyz', ['q'])).toBeNull()
+    expect(findClosestMatch('docz', ['q', 'docs'])).toBe('docs')
+  })
+
+  it('should count a repeated bigram in an option once', () => {
+    // Bigram sets: 'aaab' -> {aa, ab}, 'aaaaaaac' -> {aa, ac}; Dice = 2*1/(2+2) = 0.5.
+    // Counting the six repeated 'aa' would give 2*1/(2+7) and miss the match.
+    expect(findClosestMatch('aaab', ['aaaaaaac'])).toBe('aaaaaaac')
+  })
 })

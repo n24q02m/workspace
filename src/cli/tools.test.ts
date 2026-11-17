@@ -448,6 +448,16 @@ describe('help', () => {
     expect(out).toEqual(['# Docs documentation'])
   })
 
+  it('takes the help topic from --topic as well as from a positional', async () => {
+    const { io, out } = capture()
+
+    const code = await runToolSubcommand('help', ['--topic', 'docs'], io)
+
+    expect(code).toBe(0)
+    expect(dispatchTool).toHaveBeenCalledWith('help', { topic: 'docs' })
+    expect(out).toEqual(['# Docs documentation'])
+  })
+
   it('rejects more than one help topic', async () => {
     const { io, err } = capture()
 

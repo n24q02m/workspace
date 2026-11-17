@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PerPluginStore, setHomeDirForTesting } from '@n24q02m/hull/storage'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LEGACY_STORE_PLUGIN, STORE_PLUGIN } from './constants.js'
 import { migrateLegacyStore, resetStoreMigrationForTesting, StoreMigrationError } from './data-dir-migration.js'
 
@@ -166,6 +166,46 @@ describe('migrateLegacyStore', () => {
     expect((failure as StoreMigrationError).path).toBe(join(home, OLD_DIR))
     expect((failure as Error).message).toContain(join(home, OLD_DIR))
     expect(existsSync(join(home, NEW_DIR))).toBe(false)
+  })
+
+  it('reports a pre-rename `subs` path that is not a directory', async () => {
+    mkdirSync(join(home, OLD_DIR))
+    writeFileSync(join(home, OLD_DIR, 'subs'), 'not a directory')
+
+    const failure = await migrateLegacyStore().catch((error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(StoreMigrationError)
+    expect((failure as StoreMigrationError).path).toBe(join(home, OLD_DIR, 'subs'))
+    expect((failure as Error).message).toContain(join(home, OLD_DIR, 'subs'))
+    expect(existsSync(join(home, NEW_DIR))).toBe(false)
+  })
+
+  // hull reports a blob it cannot decrypt as "not configured"; copying nothing
+  // forward keeps the damaged legacy file where the user can still inspect it.
+  it('copies nothing forward when the pre-rename credential is corrupt', async () => {
+    mkdirSync(join(home, OLD_DIR))
+    writeFileSync(join(home, OLD_DIR, 'config.json'), 'not an encrypted blob')
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const report = await migrateLegacyStore()
+
+      expect(report).toEqual({ migrated: [], kept: [], deferred: [] })
+      expect(existsSync(join(home, NEW_DIR))).toBe(false)
+      expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('is corrupt'))
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it('skips a namespace directory that holds no credential', async () => {
+    await new PerPluginStore(LEGACY_STORE_PLUGIN).save(credential())
+    mkdirSync(join(home, OLD_DIR, 'subs', 'alice'), { recursive: true })
+
+    const report = await migrateLegacyStore()
+
+    expect(report.migrated).toEqual([{ source: join(home, OLD_DIR), sub: null }])
+    expect(report.deferred).toEqual([])
+    expect(existsSync(join(home, NEW_DIR, 'subs', 'alice'))).toBe(false)
   })
 
   it('migrates once per process even when startup paths call it twice', async () => {
