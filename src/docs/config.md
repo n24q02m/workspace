@@ -14,7 +14,7 @@ works independently of the domain tools.
 | `setup_complete` | Re-checks stored credentials after an external config change. |
 | `set` | No mutable runtime settings -- returns an informational no-op. |
 | `cache_clear` | No client-side cache -- returns an informational no-op. |
-| `account_add` | Starts a browser consent flow for one more Google account. Returns `{open, next, default_account}`; open the `open` URL to complete the consent. Works in stdio and HTTP. |
+| `account_add` | Adds one more Google account. In stdio it starts a loopback consent flow and returns `{open, next}`; open the `open` URL to complete the consent. Over HTTP it returns `{open: null, next, default_account}`, where `next` is the `workspace auth --user <namespace>` command to run on the host. |
 | `account_list` | Returns `{accounts, primary}`. |
 | `account_remove` | Forgets the account named in `account`. Returns `{removed, primary}`. |
 | `account_set_default` | Makes the account named in `account` the primary one. Returns `{primary}`. |
@@ -57,36 +57,31 @@ the primary account.
 
 ### account_add
 
-- Works in **both** transports, and picks the flow for you. In stdio it stands a
-  temporary consent server on a loopback port; over HTTP it hands you a URL that
-  comes back to a fixed `/accounts/callback` on the running server, because a
-  Web OAuth client's redirect URI has to be registered in advance.
-- **What that means for an HTTP deployment**: `<PUBLIC_URL>/accounts/callback`
-  must be one of the redirect URIs registered on the Google **Web** OAuth client
-  the server runs with. It is a second URI, separate from the
-  `<PUBLIC_URL>/callback` used to sign in to the server itself -- registering only
-  the latter leaves `account_add` failing at Google with
-  `redirect_uri_mismatch`, after the consent screen rather than before it. Both
-  are built from `PUBLIC_URL`, so that value has to be the exact public origin;
-  Google compares redirect URIs as strings.
-- The account that gets added is filed under **you**, not under whoever the
-  consent screen was signed in as. Those are two different identities: the caller
-  is identified by the `sub` in the token that authenticated this tool call, and
-  the account by the email in the tokens Google returns. The `sub` travels to the
-  callback in a signed, single-use state parameter, so nobody else's bucket can
-  receive the account -- and the state carries no authority to move your default
-  account, which is why `value="primary"` is stdio only.
+- Picks the flow by transport. In stdio it stands a temporary consent server on
+  a loopback port and returns its URL. Over HTTP the server does not serve
+  consent at all: it returns `open: null` and, in `next`, the
+  `workspace auth --user <namespace>` command to run on the host, already filled
+  in with the caller's own namespace.
+- **What that means for an HTTP deployment**: the operator runs that command on
+  the host. It writes the account into that namespace's encrypted store, so it
+  needs the server's `CREDENTIAL_SECRET` and the same credential directory. Like
+  the stdio flow, it prints a consent URL on a loopback port.
+- The account is filed under the namespace passed to `--user`, not under whoever
+  the consent screen was signed in as. Those are two different identities: the
+  caller is the users-file namespace its bearer token maps to, and the account is
+  the email in the tokens Google returns.
 - Requires `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in the
-  environment. The HTTP flow also needs `PUBLIC_URL` and `CREDENTIAL_SECRET`.
-- Returns the URL immediately rather than blocking on the consent. Open it, sign
-  in as the account you want to add, then call `account_list` to confirm the
-  outcome.
+  environment of whichever process runs the consent: the stdio server, or the
+  host `workspace auth` command.
+- In stdio it returns the URL immediately rather than blocking on the consent.
+  Open it, sign in as the account you want to add, then call `account_list` to
+  confirm the outcome.
 - Which account gets added is decided by whom you sign in as on the consent
   screen. `account_add` does **not** read the `account` parameter.
 - Pass `value="primary"` to make the newly added account the primary one. This
-  is **stdio only**: over HTTP the request would have to travel in the URL and
-  back through Google, where anyone who obtained it could point your default at
-  an account of theirs. Remote callers get told it was ignored and should use
+  is **stdio only**: over HTTP the account is added by the host `workspace auth`
+  command, which takes no such option. Remote callers get told it was ignored and
+  should use
   `account_set_default` instead. (Either way, the very first account in an empty
   store becomes primary -- a store of accounts with no working default would be
   broken.)

@@ -84,7 +84,7 @@ export async function startServer(mode: string): Promise<void> {
   // so only the FIRST run needs the browser step; later starts resolve straight to 'configured'.
   await resolveCredentialState()
   if (getState() !== 'configured') {
-    await runOAuthSetup() // opens browser, persists Google tokens
+    await runOAuthSetup() // prints the consent URL, waits for consent, persists Google tokens
     await resolveCredentialState() // -> 'configured'
   }
 
