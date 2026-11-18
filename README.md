@@ -7,7 +7,7 @@
 > **ARCHIVED 2026-09-13** — This repository is no longer maintained. Use the official Google Workspace APIs instead of this MCP server. Existing installations keep working but receive no updates or support.
 
 <p align="center">
-  <img alt="Mode: stdio · http remote oauth" src="https://img.shields.io/badge/mode-stdio_%C2%B7_http--remote--oauth-5C6BC0">
+  <img alt="Mode: stdio · http bearer" src="https://img.shields.io/badge/mode-stdio_%C2%B7_http_bearer-5C6BC0">
   <a href="https://github.com/n24q02m/workspace/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/n24q02m/workspace/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/n24q02m/workspace/actions/workflows/cd.yml"><img alt="CD" src="https://github.com/n24q02m/workspace/actions/workflows/cd.yml/badge.svg"></a>
   <a href="https://codecov.io/gh/n24q02m/workspace"><img alt="codecov" src="https://codecov.io/gh/n24q02m/workspace/graph/badge.svg"></a>
@@ -99,7 +99,8 @@ receives the consent redirect on a
 not on a public URL. Enable the Workspace APIs you plan to call on the same
 project, and add yourself as a test user while the consent screen is unpublished.
 
-The first run opens the Google consent screen in your browser; the refresh token
+The first run prints a Google consent URL to stderr (your MCP client's server log)
+and waits; open it in a browser and finish the consent. The refresh token
 is stored encrypted on your machine under `~/.workspace/` (a store an earlier
 release wrote under `~/.better-workspace/` is copied forward on the next start, and the
 older `~/.better-workspace-mcp/` is read as a fallback), so later runs start without asking again.
@@ -157,7 +158,7 @@ and renames it on the way into the container.
 
 | Variable | Required | What it does |
 | --- | --- | --- |
-| `GOOGLE_OAUTH_CLIENT_ID` | yes | Web client id. The server refuses to start without it. |
+| `GOOGLE_OAUTH_CLIENT_ID` | yes | Web client id. The server starts without it, but `workspace auth` refuses to add an account and stored tokens cannot be refreshed. |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | yes | Web client secret. Same. |
 | `CREDENTIAL_SECRET` | yes | Derives the encryption key of each user's credential store. The server refuses to start without it, rather than fail in the middle of a user's consent. |
 | `WORKSPACE_USERS_FILE` | yes in HTTP | Users file that maps each bearer token to a user namespace (hull `multi` auth). Unset uses hull's default location. |
@@ -355,8 +356,9 @@ present -- no network needed, and that is the usual case. Otherwise the server a
 Google's userinfo endpoint, which needs network access and a token that is still
 valid or refreshable.
 
-If neither works, the server reports itself as awaiting setup and opens the browser
-OAuth flow even though the stored token may still be fine. Completing that consent
+If neither works, the server reports itself as awaiting setup and starts the consent
+flow again, printing its URL to stderr, even though the stored token may still be
+fine. Completing that consent
 works, and nothing is discarded: the account you just authorized is stored and
 becomes the primary, while the old tokens are carried across under the key
 `(unidentified)` rather than being overwritten. `config(action="account_list")` then
@@ -414,7 +416,7 @@ docker compose -f docker-compose.yml -f docker-compose.http.yml up
 ```
 
 It builds the `http` image locally and publishes it on host loopback only, at
-`GOOGLE_OAUTH_WEB_CLIENT_ID`, `GOOGLE_OAUTH_WEB_CLIENT_SECRET`,
+`127.0.0.1:8087`. Set `GOOGLE_OAUTH_WEB_CLIENT_ID`, `GOOGLE_OAUTH_WEB_CLIENT_SECRET`,
 `CREDENTIAL_SECRET`, and `WORKSPACE_USERS_FILE` through your shell or an
 `.env` file (see [Environment](#environment)). The users file maps each
 bearer token to a user namespace; accounts are added on the host with

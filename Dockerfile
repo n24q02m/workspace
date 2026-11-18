@@ -1,6 +1,7 @@
 # workspace - Google Workspace MCP server, optimized for AI agents
-# Multi-target Dockerfile: `:stdio` (default for clients) + `:http` (self-hosted daemon).
-# See spec 2026-04-30-multi-mode-stdio-http-architecture.md.
+# Multi-target Dockerfile: `stdio` and `http` stages. CD builds with no `target`, so
+# every published tag is the LAST stage (`http`); the `stdio` stage is only built
+# locally (`target: stdio` in docker-compose.yml).
 # syntax=docker/dockerfile:1
 
 # Use bun for dependency installation
@@ -51,13 +52,14 @@ ENV NODE_ENV=production
 
 USER node
 
-# stdio target: direct MCP SDK StdioServerTransport (no daemon hop).
-# Intended for `docker run --rm -i n24q02m/workspace:stdio` from MCP clients.
+# stdio target: direct MCP SDK StdioServerTransport (no daemon hop). Not published as
+# a tag; build it locally (docker-compose.yml, `target: stdio`).
 FROM base AS stdio
 ENV MCP_TRANSPORT=stdio
 ENTRYPOINT ["node", "/usr/local/lib/node_modules/@n24q02m/workspace/bin/cli.mjs"]
 
-# http target: HTTP daemon (runLocalServer). Self-hosted deployment.
+# http target: hull runHttpServer with per-user bearer auth (src/transports/http.ts).
+# Last stage, so every published tag runs it. Self-hosted deployment.
 FROM base AS http
 ENV MCP_TRANSPORT=http
 ENV PORT=8080

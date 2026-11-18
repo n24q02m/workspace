@@ -60,10 +60,10 @@ parity only -- it needs no Google account.
 Served over HTTP, the server separates callers as well as accounts. The two are
 nested axes, not two words for one thing:
 
-- **User** -- who is calling. Taken from the `sub` claim of the token that
-  authenticated the request. Every `sub` gets its own credential store, encrypted
-  under its own key, so one deployment serves several people without any of them
-  reaching another's credentials.
+- **User** -- who is calling. Taken from the `namespace` of the users-file row
+  that the request's bearer token maps to (hull `multi` auth). Every namespace
+  gets its own credential store, encrypted under its own key, so one deployment
+  serves several people without any of them reaching another's credentials.
 - **Account** -- which Google account a call acts as, chosen with `account=`.
   Accounts live *inside* one user's store.
 

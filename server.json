@@ -30,28 +30,6 @@
           "name": "GOOGLE_OAUTH_CLIENT_SECRET"
         }
       ]
-    },
-    {
-      "registryType": "oci",
-      "identifier": "docker.io/n24q02m/workspace:latest",
-      "runtimeHint": "docker",
-      "transport": {
-        "type": "stdio"
-      },
-      "environmentVariables": [
-        {
-          "description": "OAuth 2.0 Desktop client ID from Google Cloud Console (APIs & Services > Credentials)",
-          "isRequired": true,
-          "isSecret": false,
-          "name": "GOOGLE_OAUTH_CLIENT_ID"
-        },
-        {
-          "description": "OAuth 2.0 Desktop client secret (paired with the client ID above)",
-          "isRequired": true,
-          "isSecret": true,
-          "name": "GOOGLE_OAUTH_CLIENT_SECRET"
-        }
-      ]
     }
   ]
 }
