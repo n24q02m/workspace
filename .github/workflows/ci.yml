@@ -2,7 +2,8 @@
 # CI Template: Public TypeScript MCP Server (workspace, better-email-mcp, etc.)
 # Source: https://github.com/n24q02m/.github/templates/ci/public-typescript.yml
 #
-# Runner strategy: ubuntu-latest for ALL jobs, harden-runner everywhere.
+# Runner strategy: lint, test and build run on ubuntu, windows and macOS so the
+# coverage gate holds on every desktop OS; every other job runs on ubuntu-latest.
 # CUSTOMIZE: Search for "# CUSTOMIZE:" comments and adjust for your repo.
 # =============================================================================
 name: CI
@@ -70,8 +71,12 @@ jobs:
   # Lint, Test & Build (TypeScript/Bun)
   # ============================================================================
   lint-and-test:
-    name: Lint, Test & Build
-    runs-on: ubuntu-latest
+    name: Lint, Test & Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -80,6 +85,7 @@ jobs:
       id-token: write
     steps:
       - name: Harden Runner
+        if: matrix.os == 'ubuntu-latest'
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
@@ -115,7 +121,7 @@ jobs:
       # refuses it. Pull requests skip it: a fork or Dependabot run cannot always mint
       # an OIDC token, and the required check must not depend on Codecov being reachable.
       - name: Upload coverage to Codecov
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           # CUSTOMIZE: Coverage file path
