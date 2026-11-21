@@ -4,11 +4,30 @@ Copyright 2026 n24q02m
 This product includes software developed by Google LLC and contributors
 (gemini-cli-extensions/workspace, Apache-2.0), vendored under src/vendored/ (services + utils).
 
-`scripts/sync-upstream.mjs` pulls a newer upstream revision over the vendored tree. It READS THE TWO
+`scripts/sync-upstream.mjs` pulls a newer upstream revision over the vendored tree. It READS THE
 LISTS BELOW to decide what it may overwrite, so the lists are the contract, not documentation of it:
-edit them in the same commit that forks or unforks a file. The script refuses to run if either list
-is unparseable or names a file that is not on disk -- an empty list would otherwise read as
+edit them in the same commit that adds, forks or unforks a file. Every non-test file under
+src/vendored/ is listed in exactly one section (a test enforces it). The script refuses to run if a
+list is unparseable or names a file that is not on disk -- an empty list would otherwise read as
 "nothing is protected" and overwrite every fork in silence.
+
+`vitest.config.ts` reads the same lists: the files that are ours (the last two sections) count
+toward the 95% coverage gate; byte-identical and forked files do not, since most of their code is
+still upstream's.
+
+## Files kept byte-identical with upstream
+
+Synced as-is: `sync-upstream.mjs` overwrites these with the upstream revision it pulls.
+
+- src/vendored/services/GmailService.ts
+- src/vendored/services/PeopleService.ts
+- src/vendored/services/SlidesService.ts
+- src/vendored/services/TasksService.ts
+- src/vendored/services/TimeService.ts
+- src/vendored/utils/DriveQueryBuilder.ts
+- src/vendored/utils/GaxiosConfig.ts
+- src/vendored/utils/IdUtils.ts
+- src/vendored/utils/constants.ts
 
 ## Files intentionally forked from upstream
 
@@ -29,9 +48,6 @@ as CONFLICT and leaves them alone; whoever syncs merges them by hand:
 - src/vendored/services/SheetsService.ts — getText read N tabs in N `values.get` calls; now one
   `values.batchGet` with a per-range fallback that preserves partial success. Sheet names are
   also quote-escaped so a tab named `It's here` yields a parseable A1 range.
-- src/vendored/utils/MimeHelper.ts — the multipart boundary suffix could be empty
-  (`.substring(7)` on a short `Math.random().toString(36)`, e.g. 0.5 -> "0.i"), so two messages
-  built in the same millisecond collided on their boundary. Now a randomUUID-derived suffix.
 - src/vendored/utils/validation.ts — optimization: Date.parse vs new Date().getTime()
 - src/vendored/services/ChatService.ts — BOUNDS: `listSpaces` takes `pageSize`/`pageToken` and returns
   `{spaces, nextPageToken}` instead of a bare array that dropped the cursor.
@@ -49,5 +65,11 @@ back in -- so `sync-upstream.mjs` never copies over them and never reports them:
 - src/vendored/auth/AuthManager.ts — reads `currentAccount()` and delegates to `WorkspaceAuth`,
   where upstream reads gemini-cli's credential files.
 
-Tests covering the forked behaviour live next to each file (`*.test.ts`); they are ours, not
-upstream's, and `src/vendored/**` stays excluded from the coverage gate.
+## Files this repo added (ours, no upstream counterpart)
+
+Upstream has no file at these paths, so `sync-upstream.mjs` skips them:
+
+- src/vendored/utils/textBounds.ts — the character budgets and truncation marker shared by the
+  BOUNDS changes in the forked DocsService and SheetsService.
+
+Tests next to each vendored file (`*.test.ts`) are ours, not upstream's.
