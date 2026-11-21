@@ -7,8 +7,8 @@
  * the loss only surfaces later as a fixed bug that came back. So these tests pin
  * the refusals and the conflict classification, and nothing else.
  */
-import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error -- plain .mjs tooling script, no declarations by design
@@ -18,8 +18,20 @@ const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const NOTICE = readFileSync(join(projectRoot, 'NOTICE'), 'utf8')
 
 describe('parseNotice', () => {
-  it('reads both lists out of the NOTICE this repo actually ships', () => {
+  it('reads every list out of the NOTICE this repo actually ships', () => {
     const lists = parseNotice(NOTICE)
+
+    expect([...lists.synced].sort()).toEqual([
+      'src/vendored/services/GmailService.ts',
+      'src/vendored/services/PeopleService.ts',
+      'src/vendored/services/SlidesService.ts',
+      'src/vendored/services/TasksService.ts',
+      'src/vendored/services/TimeService.ts',
+      'src/vendored/utils/DriveQueryBuilder.ts',
+      'src/vendored/utils/GaxiosConfig.ts',
+      'src/vendored/utils/IdUtils.ts',
+      'src/vendored/utils/constants.ts'
+    ])
 
     expect([...lists.forked].sort()).toEqual([
       'src/vendored/services/CalendarService.ts',
@@ -36,6 +48,21 @@ describe('parseNotice', () => {
       'src/vendored/utils/logger.ts',
       'src/vendored/utils/paths.ts'
     ])
+    expect([...lists.added]).toEqual(['src/vendored/utils/textBounds.ts'])
+  })
+
+  it('lists every file under src/vendored exactly once, so none falls out of the sync or the coverage gate', () => {
+    // A file NOTICE does not name is treated as plain upstream code: the sync may
+    // overwrite it and the coverage gate skips it. Our own file landing there
+    // unlisted would lose both protections without any test noticing.
+    const lists = parseNotice(NOTICE)
+    const listed = [...lists.synced, ...lists.forked, ...lists.replaced, ...lists.added]
+    const onDisk = readdirSync(join(projectRoot, 'src/vendored'), { recursive: true })
+      .map((p) => `src/vendored/${String(p).split(sep).join('/')}`)
+      .filter((p) => p.endsWith('.ts') && !p.endsWith('.test.ts'))
+
+    expect(listed.length).toBe(new Set(listed).size)
+    expect(listed.sort()).toEqual(onDisk.sort())
   })
 
   it('every path it reads is a file that exists, so the lists cannot drift unnoticed', () => {
@@ -130,6 +157,20 @@ describe('planSync', () => {
     })
 
     expect(plan).toEqual([{ path: 'src/vendored/services/GoneService.ts', status: 'gone-upstream' }])
+  })
+
+  it('leaves a file this repo added alone instead of reporting it gone upstream', () => {
+    // textBounds.ts never existed upstream; "gone upstream" would read as a
+    // prompt to delete it.
+    const plan = planSync({
+      local: new Map([['src/vendored/utils/textBounds.ts', 'ours']]),
+      upstream: new Map(),
+      forked,
+      replaced,
+      added: new Set(['src/vendored/utils/textBounds.ts'])
+    })
+
+    expect(plan).toEqual([])
   })
 
   it('reports a new upstream service without copying it in', () => {

@@ -9,8 +9,10 @@
  * opposite of the property `src/vendored/**` exists to give.
  *
  * WHAT MAY BE OVERWRITTEN IS DECIDED BY `NOTICE`, NOT BY THIS FILE. It lists the
- * files that were forked on purpose (reported as CONFLICT, never written) and the
- * files that only share a path with upstream (skipped entirely). Hardcoding those
+ * files kept byte-identical (synced normally), the files that were forked on
+ * purpose (reported as CONFLICT, never written), and the files that are this
+ * repo's own -- shims sharing a path with upstream and files upstream never had
+ * (skipped entirely). Hardcoding those
  * names here would give the repo two lists to keep in step, and the one that fell
  * behind would be discovered as a silently reverted bug fix.
  */
@@ -45,11 +47,13 @@ const VENDOR_DIRS = [
   { local: 'src/vendored/utils', upstream: 'workspace-server/src/utils', reportNew: false }
 ]
 
+const SYNCED_HEADING = '## Files kept byte-identical with upstream'
 const FORKED_HEADING = '## Files intentionally forked from upstream'
 const REPLACED_HEADING = '## Files that replace an upstream file (ours, never synced)'
+const ADDED_HEADING = '## Files this repo added (ours, no upstream counterpart)'
 
 /**
- * Read the two path lists out of NOTICE.
+ * Read the path lists out of NOTICE.
  *
  * Throws rather than returning what it managed to find. The failure that matters
  * is a NOTICE whose headings were renamed or whose bullets were reflowed: the
@@ -59,7 +63,7 @@ const REPLACED_HEADING = '## Files that replace an upstream file (ours, never sy
  * So an empty list is treated as a broken file, never as an empty one.
  */
 export function parseNotice(text) {
-  const sections = { forked: FORKED_HEADING, replaced: REPLACED_HEADING }
+  const sections = { synced: SYNCED_HEADING, forked: FORKED_HEADING, replaced: REPLACED_HEADING, added: ADDED_HEADING }
   const out = {}
 
   for (const [key, heading] of Object.entries(sections)) {
@@ -84,7 +88,7 @@ export function parseNotice(text) {
 
 /** Fail on a list that names a file nobody kept in step with the tree. */
 export function assertListedFilesExist(lists, exists) {
-  const missing = [...lists.forked, ...lists.replaced].filter((p) => !exists(p))
+  const missing = [...lists.synced, ...lists.forked, ...lists.replaced, ...lists.added].filter((p) => !exists(p))
   if (missing.length > 0) {
     throw new Error(
       `NOTICE names ${missing.length} file(s) that are not in the tree: ${missing.join(', ')}. ` +
@@ -96,15 +100,18 @@ export function assertListedFilesExist(lists, exists) {
 /**
  * Decide what happens to every vendored file, without touching anything.
  *
- * `local` and `upstream` are maps of repo-relative path -> file contents; `forked`
- * and `replaced` are the NOTICE lists. Split out from the I/O so the interesting
- * half is testable without a network clone.
+ * `local` and `upstream` are maps of repo-relative path -> file contents; `forked`,
+ * `replaced` and `added` are the NOTICE lists. Split out from the I/O so the
+ * interesting half is testable without a network clone.
  */
-export function planSync({ local, upstream, forked, replaced, reportNewIn = [] }) {
+export function planSync({ local, upstream, forked, replaced, added = new Set(), reportNewIn = [] }) {
   const plan = []
 
   for (const [path, localText] of local) {
-    if (replaced.has(path)) continue
+    // Ours either way: a replaced file must not be overwritten by its namesake, and
+    // an added file would otherwise be reported "gone upstream" -- read as a prompt
+    // to delete it.
+    if (replaced.has(path) || added.has(path)) continue
     const upstreamPath = upstreamPathFor(path)
     if (upstreamPath === null) continue
 
@@ -256,6 +263,7 @@ async function main() {
       upstream,
       forked: lists.forked,
       replaced: lists.replaced,
+      added: lists.added,
       reportNewIn: VENDOR_DIRS.filter((d) => d.reportNew)
     })
 
