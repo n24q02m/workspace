@@ -1354,6 +1354,17 @@ describe('DriveService.downloadFile on a real filesystem', () => {
     expect(fs.readFileSync(path.join(tmpRoot, 'real', 'kept.bin'))).toEqual(Buffer.from([1, 2, 3, 250]))
   })
 
+  it('still overwrites a file through a file symlink that stays inside the project root', async (ctx) => {
+    const target = path.join(tmpRoot, 'target.bin')
+    fs.writeFileSync(target, 'previous')
+    fileLink(ctx, target, path.join(tmpRoot, 'alias.bin'))
+
+    await newService().downloadFile({ fileId: 'doc-1', localPath: 'alias.bin' })
+
+    expect(fs.readFileSync(target)).toEqual(Buffer.from([1, 2, 3, 250]))
+    expect(fs.lstatSync(path.join(tmpRoot, 'alias.bin')).isSymbolicLink()).toBe(true)
+  })
+
   it('returns an error result and keeps the blocking file when a parent directory is a regular file', async () => {
     const blocker = path.join(tmpRoot, 'blocker')
     fs.writeFileSync(blocker, 'not a directory')
