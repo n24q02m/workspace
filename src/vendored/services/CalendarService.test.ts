@@ -234,6 +234,7 @@ describe('CalendarService.createEvent', () => {
 
     expect(body(res)).toEqual({ id: 'new1' })
     expect(api.events.insert).toHaveBeenCalledTimes(1)
+    expect(api.events.insert).toHaveBeenCalledWith(expect.objectContaining({ sendUpdates: null }))
   })
 
   it('keeps an explicit sendUpdates value over the attendee-based default', async () => {
