@@ -20,5 +20,11 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["tests/**/*.ts", "scripts/**/*.ts", "scripts/sync-upstream.mjs", "src/**/*.ts"]
+  "include": [
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
+    "scripts/sync-upstream.mjs",
+    "scripts/esm-specifiers.mjs",
+    "src/**/*.ts"
+  ]
 }

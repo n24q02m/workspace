@@ -72,7 +72,7 @@ bun run check       # biome check . + tsc --noEmit (CI command)
 bun run check:fix   # auto-fix biome + type-check
 bun run test        # vitest
 bun run test:coverage  # vitest --coverage (enforce threshold 95/95/95/95)
-bun run build       # tsc --build tsconfig.build.json (bo qua *.test.ts) + scripts/build-cli.js -> bin/cli.mjs
+bun run build       # tsc --build tsconfig.build.json (bo qua *.test.ts) + scripts/build-cli.js: them .js vao import tuong doi trong build/src (scripts/esm-specifiers.mjs), roi bundle -> bin/cli.mjs
 ```
 
 ## Cau hinh

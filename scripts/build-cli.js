@@ -2,11 +2,15 @@ import { chmod, cp } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
+import { addJsExtensions } from './esm-specifiers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
 
 async function build() {
+  // The tsc output `main` loads as plain Node ESM (bin/cli.mjs below is bundled)
+  const rewritten = await addJsExtensions(join(projectRoot, 'build/src'))
+
   await esbuild.build({
     entryPoints: [join(projectRoot, 'src/main.ts')],
     bundle: true,
@@ -27,6 +31,7 @@ async function build() {
   // Copy docs to build folder for resources
   await cp(join(projectRoot, 'src/docs'), join(projectRoot, 'build/src/docs'), { recursive: true })
 
+  console.log(`build/src: ${rewritten} relative imports rewritten to name the file they load`)
   console.log('CLI built successfully: bin/cli.mjs')
   console.log('Documentation copied to build/src/docs/')
 }
