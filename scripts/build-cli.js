@@ -31,7 +31,7 @@ async function build() {
   // Copy docs to build folder for resources
   await cp(join(projectRoot, 'src/docs'), join(projectRoot, 'build/src/docs'), { recursive: true })
 
-  console.log(`build/src: ${rewritten} extensionless relative imports now name their .js file`)
+  console.log(`build/src: ${rewritten} relative imports rewritten to name the file they load`)
   console.log('CLI built successfully: bin/cli.mjs')
   console.log('Documentation copied to build/src/docs/')
 }
