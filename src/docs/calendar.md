@@ -15,7 +15,9 @@
 - account (optional): email of the Google account to use; defaults to the primary account.
 - maxResults (listEvents): events per page, default 20, clamped to 1–100.
 - pageToken (listEvents): continuation token from a previous `listEvents` page.
-- timeMin / timeMax (listEvents): RFC3339 window; defaults to now until 30 days out.
+- timeMin / timeMax (listEvents): ISO 8601 window with seconds and a timezone
+  (`2026-03-01T09:00:00Z`, `2026-03-01T09:00:00+07:00`); a day that does not exist,
+  such as `2026-02-30`, is rejected. Defaults to now until 30 days out.
 - max_chars (listEvents, getEvent, listCalendars, findFreeTime): maximum
   characters returned, integer 1–100000; defaults to 20000.
 - full (listEvents, getEvent, listCalendars, findFreeTime): `true` returns the

@@ -796,6 +796,28 @@ describe('CalendarService.listEvents', () => {
     expect(api.events.list).toHaveBeenCalledWith(expect.objectContaining({ calendarId: 'me@x.com' }))
   })
 
+  describe('validation', () => {
+    it('rejects a timeMin of February 30 without calling Google', async () => {
+      const res = await newService().listEvents({ timeMin: '2026-02-30T00:00:00Z', timeMax: '2026-03-08T00:00:00Z' })
+
+      expect(body(res)).toMatchObject({ error: 'Invalid input format' })
+      expect(body(res).details).toContain('Invalid ISO 8601 datetime format')
+      expect(api.calendarList.list).not.toHaveBeenCalled()
+      expect(api.events.list).not.toHaveBeenCalled()
+    })
+
+    it('rejects a timeMax that is not ISO 8601', async () => {
+      const res = await newService().listEvents({
+        calendarId: 'cal-1',
+        timeMin: '2026-03-01T00:00:00Z',
+        timeMax: 'next week'
+      })
+
+      expect(body(res)).toMatchObject({ error: 'Invalid input format' })
+      expect(api.events.list).not.toHaveBeenCalled()
+    })
+  })
+
   describe('pagination (fork: maxResults/pageToken in, nextPageToken out)', () => {
     it('forwards maxResults and pageToken to the API', async () => {
       api.events.list.mockResolvedValue({ data: { items: [] } })

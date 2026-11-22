@@ -486,6 +486,15 @@ export class CalendarService {
       timeMax = thirtyDaysFromNow.toISOString();
     }
 
+    // Check the window before any Google call, as findFreeTime does, so an
+    // impossible day such as 02-30 is rejected instead of sent.
+    try {
+      iso8601DateTimeSchema.parse(timeMin);
+      iso8601DateTimeSchema.parse(timeMax);
+    } catch (error) {
+      return this.createValidationErrorResponse(error);
+    }
+
     const finalCalendarId = calendarId || (await this.getPrimaryCalendarId());
     logToFile(`Listing events for calendar: ${finalCalendarId}`);
     try {
