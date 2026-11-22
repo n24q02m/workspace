@@ -422,7 +422,7 @@ export class DocsService {
     heading4: 'HEADING_4',
     heading5: 'HEADING_5',
     heading6: 'HEADING_6',
-    normalText: 'NORMAL_TEXT',
+    normaltext: 'NORMAL_TEXT',
   };
 
   private static readonly TEXT_STYLES: Record<string, object> = {
@@ -740,6 +740,11 @@ export class DocsService {
       `[DocsService] Starting replaceText for document: ${documentId}, tabId: ${tabId}`,
     );
     try {
+      // An empty findText matches at every index, so the search below would
+      // never advance.
+      if (!findText) {
+        throw new Error('findText must not be empty.');
+      }
       const id = extractDocId(documentId) || documentId;
       const docs = await this.getDocsClient();
 

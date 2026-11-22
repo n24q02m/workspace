@@ -892,7 +892,9 @@ describe('DocsService (behavior over a mocked Docs API)', () => {
       ['Heading3', 'HEADING_3'],
       ['HEADING4', 'HEADING_4'],
       ['heading5', 'HEADING_5'],
-      ['heading6', 'HEADING_6']
+      ['heading6', 'HEADING_6'],
+      ['normalText', 'NORMAL_TEXT'],
+      ['normaltext', 'NORMAL_TEXT']
     ])('maps the style %s to the paragraph style %s', async (style, namedStyleType) => {
       const res = await newService().formatText({ documentId: 'doc1', formats: [{ startIndex: 2, endIndex: 9, style }] })
 
@@ -1219,6 +1221,22 @@ describe('DocsService (behavior over a mocked Docs API)', () => {
       const res = await newService().replaceText({ documentId: 'doc1', findText: 'foo', replaceText: 'bar' })
 
       expect(jsonOf(res)).toEqual({ error: 'offline' })
+    })
+
+    it('refuses an empty findText before reading the document, since it matches at every index', async () => {
+      documentsGet.mockResolvedValue({ data: { tabs: [tab('t1', 'One', [para('foo')])] } })
+      const res = await newService().replaceText({ documentId: 'doc1', findText: '', replaceText: 'bar' })
+
+      expect(jsonOf(res)).toEqual({ error: 'findText must not be empty.' })
+      expect(documentsGet).not.toHaveBeenCalled()
+      expect(mocks.documentsBatchUpdate).not.toHaveBeenCalled()
+    })
+
+    it('still replaces a findText made only of whitespace, which is not empty', async () => {
+      documentsGet.mockResolvedValue({ data: { tabs: [tab('t1', 'One', [para('a b c')])] } })
+      await newService().replaceText({ documentId: 'doc1', findText: ' ', replaceText: '_' })
+
+      expect(sentRequests()).toEqual([del('t1', 2, 3), ins('t1', 2, '_'), del('t1', 4, 5), ins('t1', 4, '_')])
     })
   })
 })

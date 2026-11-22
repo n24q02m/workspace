@@ -36,11 +36,15 @@ as CONFLICT and leaves them alone; whoever syncs merges them by hand:
 
 - src/vendored/services/DocsService.ts — BOUNDS: `getText` caps the returned text
   (20,000 characters by default, 1–100,000 via `limit`, 2,000 via `preview`) and ends a cut body with the
-  shared truncation marker that names its true size.
+  shared truncation marker that names its true size. FIX: `formatText` looked the style up in
+  lower case, so the `normalText` key never matched and `normalText` was silently ignored;
+  `replaceText` rejects an empty `findText`, which matched at every index and never advanced.
 - src/vendored/services/DriveService.ts — SECURITY: Prevent path traversal in relative localPath; BOUNDS:
   `getComments` takes `pageSize`/`pageToken` and returns `nextPageToken` instead of a bare array that
   dropped the cursor.
 - src/vendored/services/CalendarService.ts — PERFORMANCE: Using Date.parse() instead of new Date().getTime() skips object allocation and reduces GC pressure; BOUNDS: `listEvents` takes `maxResults`/`pageToken` and returns `{events, nextPageToken}` instead of a bare array that dropped the cursor.
+  FIX: Google error text no longer prints `undefined` for a field error without a message, and
+  keeps the top-level message when no field error carries any text.
 - src/vendored/utils/MimeHelper.ts — the multipart boundary suffix could be empty
   (`.substring(7)` on a short `Math.random().toString(36)`, e.g. 0.5 -> "0.i"), so two messages
   built in the same millisecond collided on their boundary. Now a randomUUID-derived suffix.
@@ -48,7 +52,9 @@ as CONFLICT and leaves them alone; whoever syncs merges them by hand:
 - src/vendored/services/SheetsService.ts — getText read N tabs in N `values.get` calls; now one
   `values.batchGet` with a per-range fallback that preserves partial success. Sheet names are
   also quote-escaped so a tab named `It's here` yields a parseable A1 range.
-- src/vendored/utils/validation.ts — optimization: Date.parse vs new Date().getTime()
+- src/vendored/utils/validation.ts — optimization: Date.parse vs new Date().getTime(); FIX:
+  `iso8601DateTimeSchema` rejects a day past the end of its month (`2026-02-30`), which
+  Date.parse rolled over into the next month.
 - src/vendored/services/ChatService.ts — BOUNDS: `listSpaces` takes `pageSize`/`pageToken` and returns
   `{spaces, nextPageToken}` instead of a bare array that dropped the cursor.
 

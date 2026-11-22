@@ -234,6 +234,7 @@ describe('CalendarService.createEvent', () => {
 
     expect(body(res)).toEqual({ id: 'new1' })
     expect(api.events.insert).toHaveBeenCalledTimes(1)
+    expect(api.events.insert).toHaveBeenCalledWith(expect.objectContaining({ sendUpdates: null }))
   })
 
   it('keeps an explicit sendUpdates value over the attendee-based default', async () => {
@@ -679,14 +680,36 @@ describe('CalendarService.createEvent', () => {
       })
     })
 
-    it('still names the reason when the only field error has no message', async () => {
+    it('names the reason after the top-level message when the only field error has no message', async () => {
       api.events.insert.mockRejectedValue(
         googleError({ message: 'Not Found', code: 404, errors: [{ reason: 'notFound' }] })
       )
 
-      const { error } = body(await create())
-      expect(error).toContain('notFound')
-      expect(error).toContain('(code 404)')
+      expect(body(await create())).toEqual({ error: 'Not Found (code 404): notFound' })
+    })
+
+    it('leaves out a field error that has neither a message nor any context', async () => {
+      api.events.insert.mockRejectedValue(
+        googleError({
+          message: 'Multiple problems',
+          code: 400,
+          errors: [{ domain: 'global', reason: 'required', message: 'Missing summary' }, {}]
+        })
+      )
+
+      expect(body(await create())).toEqual({ error: 'Multiple problems (code 400): global required: Missing summary' })
+    })
+
+    it('shows only the top-level message when no field error carries anything', async () => {
+      api.events.insert.mockRejectedValue(googleError({ message: 'Backend Error', code: 503, errors: [{}] }))
+
+      expect(body(await create())).toEqual({ error: 'Backend Error (code 503)' })
+    })
+
+    it('shows only the top-level message when errors is not an array', async () => {
+      api.events.insert.mockRejectedValue(googleError({ message: 'Bad Request', code: 400, errors: {} }))
+
+      expect(body(await create())).toEqual({ error: 'Bad Request (code 400)' })
     })
 
     it('falls back to the Error message when the failure is not a Google error response', async () => {
