@@ -1227,6 +1227,25 @@ describe('DriveService.downloadFile on a real filesystem', () => {
     expect(fs.readdirSync(tmpRoot)).toEqual([])
   })
 
+  it('refuses a destination outside the project root by name, without inspecting the filesystem', async () => {
+    // Resolving the outside part would surface its errors (EACCES, ENOTDIR, ELOOP) to the caller.
+    const realpath = vi.spyOn(mockedFs.promises, 'realpath')
+    const lstat = vi.spyOn(mockedFs.promises, 'lstat')
+    try {
+      for (const localPath of [['..', 'outside', 'x.bin'].join(path.sep), path.join(container, 'outside', 'x.bin')]) {
+        const result = await newService().downloadFile({ fileId: 'doc-1', localPath })
+
+        expect(jsonOf(result), localPath).toEqual({ error: 'localPath must be within the project root.' })
+      }
+      expect(realpath).not.toHaveBeenCalled()
+      expect(lstat).not.toHaveBeenCalled()
+      expect(filesGet).not.toHaveBeenCalled()
+    } finally {
+      realpath.mockRestore()
+      lstat.mockRestore()
+    }
+  })
+
   // A junction, not a directory symlink: Windows creates one without extra privileges.
   it('does not write through a directory link inside the project root that points outside it', async () => {
     const outside = path.join(container, 'outside')
