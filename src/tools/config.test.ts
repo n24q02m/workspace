@@ -47,6 +47,7 @@ describe('config', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
     setHomeDirForTesting(null)
     rmSync(testHomeDir, { recursive: true, force: true })
   })
@@ -74,6 +75,20 @@ describe('config', () => {
         configured: true,
         accounts: ['one@example.com'],
         primary: 'one@example.com'
+      })
+    })
+
+    it('lazily resolves configured state for a cold HTTP subject with stored tokens', async () => {
+      vi.stubEnv('CREDENTIAL_SECRET', 'test-secret')
+      await asSub('sub-alice', () => getAuth().saveTokens({ access_token: 'a' }, { email: 'alice@example.com' }))
+
+      const result = await asSub('sub-alice', () => config({ action: 'status' }))
+
+      expect(JSON.parse(textOf(result))).toEqual({
+        state: 'configured',
+        configured: true,
+        accounts: ['alice@example.com'],
+        primary: 'alice@example.com'
       })
     })
   })

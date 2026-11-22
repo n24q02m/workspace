@@ -79,6 +79,9 @@ export function config(input: ConfigInput): Promise<ConfigResult> {
   return withErrorHandling(async () => {
     switch (input.action) {
       case 'status':
+        if (getState() !== 'configured') {
+          await resolveCredentialState()
+        }
         return textResult(await statusJson())
 
       case 'setup_start':
