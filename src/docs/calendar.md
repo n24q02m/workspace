@@ -15,9 +15,12 @@
 - account (optional): email of the Google account to use; defaults to the primary account.
 - maxResults (listEvents): events per page, default 20, clamped to 1–100.
 - pageToken (listEvents): continuation token from a previous `listEvents` page.
-- timeMin / timeMax (listEvents): ISO 8601 window with seconds and a timezone
-  (`2026-03-01T09:00:00Z`, `2026-03-01T09:00:00+07:00`); a day that does not exist,
-  such as `2026-02-30`, is rejected. Defaults to now until 30 days out.
+- timeMin / timeMax (listEvents): `YYYY-MM-DDTHH:mm:ss`, optionally followed by exactly
+  three fraction digits, then `Z` or a `+HH:MM`/`-HH:MM` offset, with `T` and `Z` in upper
+  case (`2026-03-01T09:00:00Z`, `2026-03-01T09:00:00.123+07:00`). Other RFC3339 forms,
+  such as six fraction digits or `+0700`, are rejected, and so is a day that does not
+  exist, such as `2026-02-30`. Defaults to now until 30 days out; an empty `timeMax`
+  counts as omitted, an empty `timeMin` is rejected.
 - max_chars (listEvents, getEvent, listCalendars, findFreeTime): maximum
   characters returned, integer 1–100000; defaults to 20000.
 - full (listEvents, getEvent, listCalendars, findFreeTime): `true` returns the
