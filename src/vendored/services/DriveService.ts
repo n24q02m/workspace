@@ -37,16 +37,33 @@ const URL_PATTERNS = [
 ];
 
 const OUTSIDE_PROJECT_ROOT = 'localPath must be within the project root.';
+const DANGLING_LINK =
+  'localPath must not go through a link whose target does not exist.';
 
 /** Whether a `path.relative(root, target)` result leaves `root`. */
 function leavesRoot(relative: string): boolean {
   return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
 }
 
+/** Whether anything, a link included, exists at `target` itself. */
+async function entryExists(target: string): Promise<boolean> {
+  try {
+    await fs.promises.lstat(target);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}
+
 /**
  * Resolve a download destination against PROJECT_ROOT, refusing any that lands
  * outside it: through `..` (also inside an absolute path), a sibling sharing the
  * root's name as a prefix, or a directory or file link that points out of it.
+ * A link whose target does not exist is refused too: writing through it would
+ * create that target, wherever it points.
  */
 async function resolveDownloadPath(localPath: string): Promise<string> {
   const absolutePath = path.resolve(PROJECT_ROOT, localPath);
@@ -65,6 +82,10 @@ async function resolveDownloadPath(localPath: string): Promise<string> {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
+      }
+      // A dangling link gives ENOENT too, but the link itself exists.
+      if (await entryExists(path.join(real, part))) {
+        throw new Error(DANGLING_LINK);
       }
       // Nothing exists below a missing component, so no link there can lead out:
       // the real location of the deepest existing one decides.
@@ -679,7 +700,8 @@ export class DriveService {
 
       const buffer = Buffer.from(response.data as unknown as ArrayBuffer);
 
-      // 3. Save to localPath
+      // 3. Save to localPath, checked again: a link can appear during the download.
+      await resolveDownloadPath(localPath);
       const dir = path.dirname(absolutePath);
 
       await fs.promises.mkdir(dir, { recursive: true });

@@ -21,7 +21,9 @@
 - full (search, getComments, findFolder): `true` returns the complete payload and
   ignores `max_chars` and the item bound.
 - localPath (downloadFile): destination file inside the server install
-  directory; a relative path resolves against that directory.
+  directory; a relative path resolves against that directory. Links on the
+  path are followed: a destination whose real location is outside that
+  directory, or that goes through a link to a missing target, is refused.
 
 downloadFile writes to the server's disk, so it is available only over local
 stdio transport. A remote client does not see it in the schema, and a call

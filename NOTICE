@@ -40,8 +40,9 @@ as CONFLICT and leaves them alone; whoever syncs merges them by hand:
   lower case, so the `normalText` key never matched and `normalText` was silently ignored;
   `replaceText` rejects an empty `findText`, which matched at every index and never advanced.
 - src/vendored/services/DriveService.ts — SECURITY: Prevent path traversal in relative localPath; FIX:
-  `downloadFile` resolves `localPath`, relative or absolute, to its real location (links included)
-  and refuses one outside the project root before it downloads anything; BOUNDS:
+  `downloadFile` checks the real location of `localPath`, relative or absolute, with links followed,
+  and refuses one outside the project root or one through a link to a missing target, before it
+  downloads anything and again before it writes; BOUNDS:
   `getComments` takes `pageSize`/`pageToken` and returns `nextPageToken` instead of a bare array that
   dropped the cursor.
 - src/vendored/services/CalendarService.ts — PERFORMANCE: Using Date.parse() instead of new Date().getTime() skips object allocation and reduces GC pressure; BOUNDS: `listEvents` takes `maxResults`/`pageToken` and returns `{events, nextPageToken}` instead of a bare array that dropped the cursor.

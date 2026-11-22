@@ -1,7 +1,7 @@
-import fs from 'node:fs'
+import fs, * as mockedFs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, type TestContext, vi } from 'vitest'
 
 const {
   filesGet,
@@ -1176,6 +1176,17 @@ describe('DriveService.downloadFile on a real filesystem', () => {
     fs.rmSync(container, { recursive: true, force: true })
   })
 
+  // A file symlink needs Developer Mode or an elevated shell on Windows: without either the test
+  // is skipped, not failed. Directory links below are junctions, which need neither.
+  function fileLink(ctx: TestContext, target: string, link: string): void {
+    try {
+      fs.symlinkSync(target, link, 'file')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EPERM') ctx.skip('creating a file symlink needs privileges here')
+      throw error
+    }
+  }
+
   it('writes the downloaded bytes to a nested relative path, creating the missing directories', async () => {
     const localPath = ['out', 'nested', 'report.pdf'].join(path.sep)
     const expectedPath = path.join(tmpRoot, 'out', 'nested', 'report.pdf')
@@ -1232,10 +1243,10 @@ describe('DriveService.downloadFile on a real filesystem', () => {
     expect(fs.readdirSync(outside)).toEqual([])
   })
 
-  it('does not overwrite a file outside the project root through a file symlink inside it', async () => {
+  it('does not overwrite a file outside the project root through a file symlink inside it', async (ctx) => {
     const outside = path.join(container, 'outside.bin')
     fs.writeFileSync(outside, 'kept')
-    fs.symlinkSync(outside, path.join(tmpRoot, 'alias.bin'))
+    fileLink(ctx, outside, path.join(tmpRoot, 'alias.bin'))
 
     const result = await newService().downloadFile({ fileId: 'doc-1', localPath: 'alias.bin' })
 
@@ -1243,9 +1254,71 @@ describe('DriveService.downloadFile on a real filesystem', () => {
     expect(fs.readFileSync(outside, 'utf8')).toBe('kept')
   })
 
-  it('refuses a destination it cannot resolve, through a link loop, before downloading anything', async () => {
+  // Writing through a link whose target is missing creates that target, wherever it points.
+  it('does not create a file through a dangling link, whatever its target or chain', async (ctx) => {
+    fileLink(ctx, path.join(container, 'new.bin'), path.join(tmpRoot, 'new.bin'))
+    fileLink(ctx, path.join('..', 'relative.bin'), path.join(tmpRoot, 'relative.bin'))
+    fileLink(ctx, path.join(container, 'two.bin'), path.join(tmpRoot, 'second.bin'))
+    fileLink(ctx, path.join(tmpRoot, 'second.bin'), path.join(tmpRoot, 'first.bin'))
+
+    for (const localPath of ['new.bin', 'relative.bin', 'first.bin']) {
+      const result = await newService().downloadFile({ fileId: 'doc-1', localPath })
+
+      expect(jsonOf(result), localPath).toEqual({
+        error: 'localPath must not go through a link whose target does not exist.'
+      })
+    }
+    expect(filesGet).not.toHaveBeenCalled()
+    expect(fs.readdirSync(container)).toEqual(['project'])
+  })
+
+  it('refuses a dangling directory link on the way to the destination before downloading anything', async () => {
+    const missing = path.join(container, 'missing')
+    fs.symlinkSync(missing, path.join(tmpRoot, 'gone'), 'junction')
+
+    const result = await newService().downloadFile({ fileId: 'doc-1', localPath: ['gone', 'x.bin'].join(path.sep) })
+
+    expect(jsonOf(result)).toEqual({ error: 'localPath must not go through a link whose target does not exist.' })
+    expect(filesGet).not.toHaveBeenCalled()
+    expect(fs.existsSync(missing)).toBe(false)
+  })
+
+  it('reports a failure to inspect a missing component instead of treating it as absent', async () => {
+    // DriveService reads fs.promises from the mocked module; the spy replaces lstat there only.
+    const denied = Object.assign(new Error('EACCES: permission denied, lstat'), { code: 'EACCES' })
+    const lstat = vi.spyOn(mockedFs.promises, 'lstat').mockRejectedValueOnce(denied)
+    try {
+      const result = await newService().downloadFile({ fileId: 'doc-1', localPath: ['missing', 'x.bin'].join(path.sep) })
+
+      expect(jsonOf(result)).toEqual({ error: 'EACCES: permission denied, lstat' })
+      expect(filesGet).not.toHaveBeenCalled()
+    } finally {
+      lstat.mockRestore()
+    }
+  })
+
+  it('checks the destination again after the download, before it writes', async () => {
+    const outside = path.join(container, 'outside')
+    fs.mkdirSync(outside)
+    filesGet.mockReset()
+    filesGet
+      .mockResolvedValueOnce({ data: { id: 'doc-1', name: 'report.pdf', mimeType: 'application/pdf' } })
+      .mockImplementationOnce(async () => {
+        // The first check passed on a missing `late`; it becomes a link out while the bytes download.
+        fs.symlinkSync(outside, path.join(tmpRoot, 'late'), 'junction')
+        return { data: new Uint8Array([1, 2, 3, 250]).buffer }
+      })
+
+    const result = await newService().downloadFile({ fileId: 'doc-1', localPath: ['late', 'x.bin'].join(path.sep) })
+
+    expect(jsonOf(result)).toEqual({ error: 'localPath must be within the project root.' })
+    expect(filesGet).toHaveBeenCalledTimes(2)
+    expect(fs.readdirSync(outside)).toEqual([])
+  })
+
+  it('refuses a destination it cannot resolve, through a link loop, before downloading anything', async (ctx) => {
     const loop = path.join(tmpRoot, 'loop')
-    fs.symlinkSync(loop, loop)
+    fileLink(ctx, loop, loop)
 
     const result = await newService().downloadFile({ fileId: 'doc-1', localPath: ['loop', 'x.bin'].join(path.sep) })
 
