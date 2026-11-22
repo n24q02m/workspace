@@ -11,7 +11,6 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error -- plain .mjs tooling script, no declarations by design
 import { assertListedFilesExist, parseNotice, planSync } from '../scripts/sync-upstream.mjs'
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..')

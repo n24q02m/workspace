@@ -52,6 +52,8 @@ const FORKED_HEADING = '## Files intentionally forked from upstream'
 const REPLACED_HEADING = '## Files that replace an upstream file (ours, never synced)'
 const ADDED_HEADING = '## Files this repo added (ours, no upstream counterpart)'
 
+/** @typedef {{ synced: Set<string>, forked: Set<string>, replaced: Set<string>, added: Set<string> }} NoticeLists */
+
 /**
  * Read the path lists out of NOTICE.
  *
@@ -61,10 +63,13 @@ const ADDED_HEADING = '## Files this repo added (ours, no upstream counterpart)'
  * "no file is protected" and overwrites every intentional fork -- silently, since
  * the copy itself succeeds and the loss only surfaces when the fixed bug returns.
  * So an empty list is treated as a broken file, never as an empty one.
+ *
+ * @param {string} text
+ * @returns {NoticeLists}
  */
 export function parseNotice(text) {
   const sections = { synced: SYNCED_HEADING, forked: FORKED_HEADING, replaced: REPLACED_HEADING, added: ADDED_HEADING }
-  const out = {}
+  const out = /** @type {NoticeLists} */ ({})
 
   for (const [key, heading] of Object.entries(sections)) {
     const start = text.indexOf(heading)
@@ -86,7 +91,12 @@ export function parseNotice(text) {
   return out
 }
 
-/** Fail on a list that names a file nobody kept in step with the tree. */
+/**
+ * Fail on a list that names a file nobody kept in step with the tree.
+ *
+ * @param {NoticeLists} lists
+ * @param {(path: string) => boolean} exists
+ */
 export function assertListedFilesExist(lists, exists) {
   const missing = [...lists.synced, ...lists.forked, ...lists.replaced, ...lists.added].filter((p) => !exists(p))
   if (missing.length > 0) {
@@ -103,8 +113,19 @@ export function assertListedFilesExist(lists, exists) {
  * `local` and `upstream` are maps of repo-relative path -> file contents; `forked`,
  * `replaced` and `added` are the NOTICE lists. Split out from the I/O so the
  * interesting half is testable without a network clone.
+ *
+ * @param {{
+ *   local: Map<string, string>,
+ *   upstream: Map<string, string>,
+ *   forked: Set<string>,
+ *   replaced: Set<string>,
+ *   added?: Set<string>,
+ *   reportNewIn?: Array<{ local: string, upstream: string }>
+ * }} sources
+ * @returns {Array<{ path: string, status: 'gone-upstream' | 'unchanged' | 'conflict' | 'update' | 'new-upstream', text?: string }>}
  */
 export function planSync({ local, upstream, forked, replaced, added = new Set(), reportNewIn = [] }) {
+  /** @type {ReturnType<typeof planSync>} */
   const plan = []
 
   for (const [path, localText] of local) {
