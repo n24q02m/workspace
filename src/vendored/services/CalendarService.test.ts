@@ -787,6 +787,18 @@ describe('CalendarService.listEvents', () => {
     )
   })
 
+  it('treats an empty timeMax as omitted and ends the window thirty days from now', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-10T08:30:00.000Z'))
+    api.events.list.mockResolvedValue({ data: { items: [] } })
+
+    await newService().listEvents({ calendarId: 'cal-1', timeMin: '2026-01-10T09:00:00Z', timeMax: '' })
+
+    expect(api.events.list).toHaveBeenCalledWith(
+      expect.objectContaining({ timeMin: '2026-01-10T09:00:00Z', timeMax: '2026-02-09T08:30:00.000Z' })
+    )
+  })
+
   it('looks up the primary calendar when no calendarId is given', async () => {
     api.calendarList.list.mockResolvedValue({ data: { items: [{ id: 'me@x.com', primary: true }] } })
     api.events.list.mockResolvedValue({ data: { items: [] } })
