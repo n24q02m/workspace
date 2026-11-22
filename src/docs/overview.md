@@ -44,6 +44,13 @@ grow is bounded by default at 20,000 characters:
 
 Each tool's page (`help(topic="<name>")`) lists its own bound and escape hatch.
 
+## Errors
+
+A failed call comes back with `isError: true`. Most domain tools report a
+failure as a JSON text payload, `{"error": "<message>", ...}`; the tool flags
+that payload as an error and passes its text through unchanged. On the shell,
+a failed call prints the message to stderr and exits 1.
+
 ## Multi-account
 
 Every domain tool takes `account="<email>"`, choosing which Google account the

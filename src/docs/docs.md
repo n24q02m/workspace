@@ -25,7 +25,8 @@ primary.
 
 Every action returns the MCP `CallTool` result shape directly from
 `DocsService` (`{content: [{type: "text", text}], isError?: true}`) -- the
-`docs` tool does not re-wrap or transform it.
+`docs` tool does not re-wrap it. A failure carries `{"error": "<message>"}`
+as its text and `isError: true` (see `help(topic="overview")`).
 
 ## Examples
 
