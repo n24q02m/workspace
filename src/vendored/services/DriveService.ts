@@ -36,6 +36,68 @@ const URL_PATTERNS = [
   { pattern: /[?&]id=([a-zA-Z0-9-_]+)/, type: 'unknown' as const },
 ];
 
+const OUTSIDE_PROJECT_ROOT = 'localPath must be within the project root.';
+const DANGLING_LINK =
+  'localPath must not go through a link whose target does not exist.';
+
+/** Whether a `path.relative(root, target)` result leaves `root`. */
+function leavesRoot(relative: string): boolean {
+  return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+}
+
+/** Whether anything, a link included, exists at `target` itself. */
+async function entryExists(target: string): Promise<boolean> {
+  try {
+    await fs.promises.lstat(target);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Resolve a download destination against PROJECT_ROOT, refusing any that lands
+ * outside it: through `..` (also inside an absolute path), a sibling sharing the
+ * root's name as a prefix, or a directory or file link that points out of it.
+ * A link whose target does not exist is refused too: writing through it would
+ * create that target, wherever it points.
+ */
+async function resolveDownloadPath(localPath: string): Promise<string> {
+  const absolutePath = path.resolve(PROJECT_ROOT, localPath);
+  const relative = path.relative(PROJECT_ROOT, absolutePath);
+  if (leavesRoot(relative)) {
+    throw new Error(OUTSIDE_PROJECT_ROOT);
+  }
+
+  // Inside the root by name; a link on the part of the path that exists can still lead out.
+  const realRoot = await fs.promises.realpath(PROJECT_ROOT);
+  const parts = relative ? relative.split(path.sep) : [];
+  let real = realRoot;
+  for (const part of parts) {
+    try {
+      real = await fs.promises.realpath(path.join(real, part));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+      // A dangling link gives ENOENT too, but the link itself exists.
+      if (await entryExists(path.join(real, part))) {
+        throw new Error(DANGLING_LINK);
+      }
+      // Nothing exists below a missing component, so no link there can lead out:
+      // the real location of the deepest existing one decides.
+      break;
+    }
+  }
+  if (leavesRoot(path.relative(realRoot, real))) {
+    throw new Error(OUTSIDE_PROJECT_ROOT);
+  }
+  return absolutePath;
+}
+
 export class DriveService {
   constructor(private authManager: AuthManager) {}
 
@@ -569,6 +631,8 @@ export class DriveService {
   }) => {
     logToFile(`Downloading Drive file ${fileId} to ${localPath}`);
     try {
+      // Checked before anything is fetched, so a refused destination downloads nothing.
+      const absolutePath = await resolveDownloadPath(localPath);
       const drive = await this.getDriveClient();
       const id = extractDocumentId(fileId);
 
@@ -636,15 +700,8 @@ export class DriveService {
 
       const buffer = Buffer.from(response.data as unknown as ArrayBuffer);
 
-      // 3. Save to localPath
-      const absolutePath = path.isAbsolute(localPath)
-        ? localPath
-        : path.resolve(PROJECT_ROOT, localPath);
-
-      if (!absolutePath.startsWith(PROJECT_ROOT + path.sep) && absolutePath !== PROJECT_ROOT) {
-        throw new Error('localPath must be within the project root.');
-      }
-
+      // 3. Save to localPath, checked again: a link can appear during the download.
+      await resolveDownloadPath(localPath);
       const dir = path.dirname(absolutePath);
 
       await fs.promises.mkdir(dir, { recursive: true });
