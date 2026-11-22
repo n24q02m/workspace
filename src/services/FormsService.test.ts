@@ -210,9 +210,9 @@ describe('FormsService', () => {
     })
 
     it('lets an API failure reject so the tool layer can mark it isError', async () => {
-      // The vendored services swallow errors into a success-shaped result whose
-      // text happens to be {"error": ...}; a client cannot tell that from data.
-      // Ours throws, and withErrorHandling/registry turn it into isError: true.
+      // The vendored services catch errors and return {"error": ...} text,
+      // which the domain factory has to flag after the fact. Ours throws, and
+      // withErrorHandling/registry turn it into isError: true.
       formsApi.forms.get.mockRejectedValue(new Error('Requested entity was not found.'))
 
       await expect(svc.get({ formId: 'form-1' })).rejects.toThrow('Requested entity was not found.')

@@ -7,10 +7,10 @@
  * factory dispatches into it exactly like the other ten domains.
  *
  * One deliberate difference: API failures are thrown, not caught and returned as
- * a success-shaped result whose text happens to be {"error": ...}. The tool
- * layer (withErrorHandling -> registry) renders a thrown error as a real
- * isError result with sanitized details; swallowing it here would tell the
- * caller the call succeeded.
+ * {"error": ...} text the way the vendored services do. The tool layer
+ * (withErrorHandling -> registry) renders a thrown error as an isError result
+ * with sanitized details; the domain factory only flags a vendored {error}
+ * payload after the fact (see flagErrorPayload in tools/domains/factory.ts).
  *
  * Scope note: everything here is covered by the two Forms scopes already in
  * WORKSPACE_SCOPES -- forms.body for create/get/batchUpdate, and

@@ -44,6 +44,20 @@ grow is bounded by default at 20,000 characters:
 
 Each tool's page (`help(topic="<name>")`) lists its own bound and escape hatch.
 
+## Errors
+
+A failed call comes back with `isError: true`, in one of two text forms. An
+invalid call, such as an unknown action or a bad parameter, comes back as plain
+text. A failure the domain service reports itself comes back as a JSON text
+payload, `{"error": "<message>", ...}`; the tool flags that payload as an error
+and passes its text through unchanged. Some services use the same payload for
+an empty answer, such as no free time found or no Chat space with that name, so
+those calls are flagged too. A few service messages are plain text and carry
+no flag, for example a Drive download of a Google Docs, Sheets or Slides file,
+which names the tool to use instead. On the shell, a failed call prints the
+result text to stderr and exits 1; with `--json` that text is the `error` field
+of the envelope.
+
 ## Multi-account
 
 Every domain tool takes `account="<email>"`, choosing which Google account the

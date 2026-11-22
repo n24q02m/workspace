@@ -67,6 +67,28 @@ function normalizeBoundedParams(
   return normalized
 }
 
+/**
+ * Upstream's vendored services report most failures by returning
+ * `{error: "<message>"}` as the text payload instead of throwing, and leave
+ * `isError` unset, so an MCP client would read the failure as a success.
+ * Flag those results here, once for every domain, rather than editing each
+ * vendored file. A payload counts as an error only when its text is a JSON
+ * object whose `error` field is a string.
+ */
+function flagErrorPayload(result: CallToolResult): CallToolResult {
+  if (result.isError === true) return result
+  const item = result.content[0]
+  if (item?.type !== 'text' || !item.text.startsWith('{') || !item.text.includes('"error"')) return result
+  let payload: unknown
+  try {
+    payload = JSON.parse(item.text)
+  } catch {
+    return result
+  }
+  if (typeof (payload as { error?: unknown }).error !== 'string') return result
+  return { ...result, isError: true }
+}
+
 export interface DomainRunInput {
   action: string
   account?: string
@@ -110,7 +132,8 @@ export function makeDomainRun(
       // getAuthenticatedClient() takes no arguments, so the account cannot ride
       // down as a parameter without editing vendored code. It travels in
       // AsyncLocalStorage instead; the AuthManager shim reads it back out.
-      const result = await runWithAccount(account, () => method(params))
+      const result = flagErrorPayload(await runWithAccount(account, () => method(params)))
+      // boundToolResult passes an isError result through whole.
       if (!bound || !budget) return result
       return boundToolResult(result, budget, bound.hint ?? DEFAULT_BOUND_HINT)
     })()

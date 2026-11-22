@@ -104,11 +104,12 @@ describe('M2 multi-account protocol E2E', () => {
       name: 'docs',
       arguments: { action: 'getText', account: 'ghost@example.com', documentId: 'doc-1' }
     })
-    // No isError to assert on: the vendored services convert a thrown error into a
-    // NORMAL result whose text is {"error": "..."} (see DocsService.getText's catch),
-    // and that file is byte-identical upstream code. The contract that matters is
-    // which credential the call tried to use -- the account is named, and the other
-    // account's token never shows up.
+    // The vendored DocsService.getText catches the thrown error and returns
+    // {"error": "..."} as its text without isError; the domain factory flags that
+    // payload, so the client sees a failure. Beyond that, the contract that matters
+    // is which credential the call tried to use -- the account is named, and the
+    // other account's token never shows up.
+    expect(result.isError).toBe(true)
     const body = JSON.parse(textOf(result)) as { error?: string }
     expect(body.error).toContain('ghost@example.com')
     expect(body.error).toContain('not configured')
