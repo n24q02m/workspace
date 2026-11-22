@@ -343,10 +343,21 @@ describe('failures', () => {
   it('rejects a non-numeric value for a number option', async () => {
     const { io, err } = capture()
 
-    const code = await runToolSubcommand('gmail', ['search', '--maxResults', 'lots'], io)
+    const code = await runToolSubcommand('calendar', ['findFreeTime', '--duration', 'lots'], io)
 
     expect(code).toBe(2)
-    expect(err.join('\n')).toContain('--maxResults expects a number')
+    expect(err.join('\n')).toContain('--duration expects a number')
+    expect(dispatchTool).not.toHaveBeenCalled()
+  })
+
+  it.each(['lots', '2.5'])('rejects %s for an integer option', async (raw) => {
+    const { io, err } = capture()
+
+    const code = await runToolSubcommand('gmail', ['search', '--maxResults', raw], io)
+
+    expect(code).toBe(2)
+    expect(err.join('\n')).toContain(`--maxResults expects an integer, got '${raw}'`)
+    expect(dispatchTool).not.toHaveBeenCalled()
   })
 
   it('rejects an option whose value is missing', async () => {
@@ -399,6 +410,19 @@ describe('help', () => {
     expect(text).toContain('getText')
     expect(text).toContain('--documentId <string>')
     expect(dispatchTool).not.toHaveBeenCalled()
+  })
+
+  // The CLI runs on the user's machine, so its help describes the local-only
+  // actions the remote tool description leaves out.
+  it('describes the local-only actions in per-tool usage', async () => {
+    const { io, out } = capture()
+
+    const code = await runToolSubcommand('slides', ['--help'], io)
+
+    expect(code).toBe(0)
+    expect(out.join('\n')).toContain(
+      'getSlideThumbnail saves the thumbnail PNG of the slideObjectId slide to the localPath file'
+    )
   })
 
   it('prints the grouped surface for a bare `workspace help`', async () => {

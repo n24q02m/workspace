@@ -47,7 +47,9 @@
             "description": "Tab ID to target (optional, for multi-tab documents)"
           },
           "limit": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum Docs text characters for getText (1-100000; default 20000)"
           },
           "preview": {
@@ -55,12 +57,18 @@
             "description": "Use a 2000-character getText preview unless limit is provided"
           },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by getSuggestions (1-100000; default 20000)"
           },
           "full": {
             "type": "boolean",
             "description": "Return every getSuggestions entry, bypassing the default 20000-character and 100-item bounds"
+          },
+          "findText": {
+            "type": "string",
+            "description": "Text to find, must not be empty (for replaceText)"
           },
           "replaceText": {
             "type": "string",
@@ -78,7 +86,23 @@
                   "type": "number"
                 },
                 "style": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "heading1",
+                    "heading2",
+                    "heading3",
+                    "heading4",
+                    "heading5",
+                    "heading6",
+                    "normalText",
+                    "bold",
+                    "italic",
+                    "underline",
+                    "strikethrough",
+                    "code",
+                    "link"
+                  ],
+                  "description": "Heading level, text style, code font, or link (link needs url)"
                 },
                 "url": {
                   "type": "string"
@@ -170,12 +194,11 @@
           "parentId": {
             "type": "string"
           },
-          "destinationFolderId": {
-            "type": "string"
-          },
           "pageSize": {
-            "type": "number",
-            "description": "Maximum search results per page (default 10)"
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum files or comments per page (for search, getComments; 1-100, default 20)"
           },
           "pageToken": {
             "type": "string",
@@ -190,8 +213,14 @@
             "type": "boolean",
             "description": "Restrict search to unread files where supported"
           },
+          "sharedWithMe": {
+            "type": "boolean",
+            "description": "Restrict search to files shared with the user"
+          },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
           },
           "full": {
@@ -200,7 +229,7 @@
           },
           "localPath": {
             "type": "string",
-            "description": "Local destination path for downloadFile. This action is available only over local stdio transport."
+            "description": "Destination file for downloadFile, inside the server install directory; a relative path resolves against that directory. This action is available only over local stdio transport."
           }
         },
         "required": ["action"]
@@ -250,24 +279,190 @@
             "type": "string"
           },
           "start": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "dateTime": {
+                "type": "string",
+                "description": "Start time of a timed event, e.g. 2026-03-01T09:00:00Z"
+              },
+              "date": {
+                "type": "string",
+                "description": "Start day of an all-day event, YYYY-MM-DD"
+              }
+            },
+            "description": "Event start, with exactly one of dateTime or date (for createEvent, updateEvent)"
           },
           "end": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "dateTime": {
+                "type": "string",
+                "description": "End time of a timed event, e.g. 2026-03-01T10:00:00Z"
+              },
+              "date": {
+                "type": "string",
+                "description": "Day after the last day of an all-day event, YYYY-MM-DD"
+              }
+            },
+            "description": "Event end, with exactly one of dateTime or date (for createEvent, updateEvent)"
           },
           "attendees": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Attendee emails (for createEvent, updateEvent), or the people whose shared free time findFreeTime looks for (\"me\" is the caller)"
+          },
+          "sendUpdates": {
+            "type": "string",
+            "enum": ["all", "externalOnly", "none"],
+            "description": "Who receives invitation emails (for createEvent)"
+          },
+          "addGoogleMeet": {
+            "type": "boolean",
+            "description": "Add a Google Meet link (for createEvent, updateEvent)"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fileUrl": {
+                  "type": "string",
+                  "description": "Google Drive file URL"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "mimeType": {
+                  "type": "string"
+                }
+              },
+              "required": ["fileUrl"]
+            },
+            "description": "Drive files to attach; replaces any existing attachments (for createEvent, updateEvent)"
+          },
+          "eventType": {
+            "type": "string",
+            "enum": ["default", "focusTime", "outOfOffice", "workingLocation"],
+            "description": "Kind of event to create (for createEvent; default \"default\")"
+          },
+          "focusTimeProperties": {
+            "type": "object",
+            "properties": {
+              "chatStatus": {
+                "type": "string",
+                "enum": ["available", "doNotDisturb"]
+              },
+              "autoDeclineMode": {
+                "type": "string",
+                "enum": ["declineNone", "declineAllConflictingInvitations", "declineOnlyNewConflictingInvitations"]
+              },
+              "declineMessage": {
+                "type": "string"
+              }
+            },
+            "description": "Settings of a focusTime event (for createEvent)"
+          },
+          "outOfOfficeProperties": {
+            "type": "object",
+            "properties": {
+              "autoDeclineMode": {
+                "type": "string",
+                "enum": ["declineNone", "declineAllConflictingInvitations", "declineOnlyNewConflictingInvitations"]
+              },
+              "declineMessage": {
+                "type": "string"
+              }
+            },
+            "description": "Settings of an outOfOffice event (for createEvent)"
+          },
+          "workingLocationProperties": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["homeOffice", "officeLocation", "customLocation"]
+              },
+              "officeLocation": {
+                "type": "object",
+                "properties": {
+                  "buildingId": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                }
+              },
+              "customLocation": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": ["label"]
+              }
+            },
+            "required": ["type"],
+            "description": "Location of a workingLocation event (for createEvent)"
+          },
+          "timeMin": {
+            "type": "string",
+            "description": "Window start (for listEvents, findFreeTime): YYYY-MM-DDTHH:mm:ss, optionally three fraction digits, then Z or a +HH:MM/-HH:MM offset, e.g. 2026-03-01T09:00:00Z or 2026-03-01T09:00:00.123+07:00. listEvents defaults to now; findFreeTime requires it."
+          },
+          "timeMax": {
+            "type": "string",
+            "description": "Window end (for listEvents, findFreeTime), in the same format as timeMin, e.g. 2026-03-01T09:00:00Z. listEvents defaults to 30 days from now; findFreeTime requires it."
+          },
+          "eventTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["default", "focusTime", "outOfOffice", "workingLocation", "birthday", "fromGmail"]
+            },
+            "description": "Return only events of these kinds (for listEvents)"
+          },
+          "attendeeResponseStatus": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["accepted", "tentative", "needsAction", "declined"]
+            },
+            "description": "Keep events where the caller answered with one of these (for listEvents; default accepted, tentative, needsAction)"
+          },
+          "responseStatus": {
+            "type": "string",
+            "enum": ["accepted", "declined", "tentative"],
+            "description": "Answer to the invitation (for respondToEvent)"
+          },
+          "sendNotification": {
+            "type": "boolean",
+            "description": "Send update emails about the answer (for respondToEvent; default true)"
+          },
+          "responseMessage": {
+            "type": "string",
+            "description": "Comment attached to the answer (for respondToEvent)"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Length of the free slot to find, in minutes (for findFreeTime)"
           },
           "maxResults": {
-            "type": "number",
-            "description": "Maximum events per page (for listEvents; default 20)"
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum events per page (for listEvents; 1-100, default 20)"
           },
           "pageToken": {
             "type": "string",
             "description": "Continuation token from a previous listEvents page"
           },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
           },
           "full": {
@@ -309,24 +504,38 @@
             "type": "string",
             "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
           },
-          "spaceId": {
-            "type": "string"
+          "spaceName": {
+            "type": "string",
+            "description": "Space resource name, e.g. spaces/AAAA (for sendMessage, getMessages, listThreads)"
           },
           "displayName": {
-            "type": "string"
+            "type": "string",
+            "description": "Space display name (for findSpaceByName, setUpSpace)"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "description": "Email of the other person (for sendDm, findDmByEmail)"
           },
-          "text": {
-            "type": "string"
+          "message": {
+            "type": "string",
+            "description": "Message text (for sendMessage, sendDm)"
           },
-          "threadId": {
-            "type": "string"
+          "threadName": {
+            "type": "string",
+            "description": "Thread resource name, e.g. spaces/AAAA/threads/BBBB: the thread to reply in (sendMessage, sendDm) or to read (getMessages)"
+          },
+          "userNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Members of the new space, as users/<user ID or email> (for setUpSpace)"
           },
           "pageSize": {
-            "type": "number",
-            "description": "Maximum spaces, messages, or threads per page"
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum spaces, messages, or threads per page (for listSpaces, getMessages, listThreads; 1-100, default 20)"
           },
           "pageToken": {
             "type": "string",
@@ -337,7 +546,9 @@
             "description": "Return only unread messages"
           },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
           },
           "full": {
@@ -346,11 +557,7 @@
           },
           "orderBy": {
             "type": "string",
-            "description": "Message ordering expression"
-          },
-          "filter": {
-            "type": "string",
-            "description": "Chat message filter"
+            "description": "Message ordering expression, e.g. \"createTime desc\" (for getMessages)"
           }
         },
         "required": ["action"]
@@ -358,7 +565,7 @@
     },
     {
       "name": "gmail",
-      "description": "Gmail operations. Actions: search, get, downloadAttachment, modify, batchModify, modifyThread, send, createDraft, sendDraft, listLabels, createLabel.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).",
+      "description": "Gmail operations. Actions: search, get, modify, batchModify, modifyThread, send, createDraft, sendDraft, listLabels, createLabel.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: downloadAttachment saves the attachmentId attachment of messageId to an absolute localPath on this machine, and createDraft attaches local files through attachments.",
       "annotations": {
         "title": "Gmail",
         "readOnlyHint": false,
@@ -396,11 +603,70 @@
           "messageId": {
             "type": "string"
           },
+          "messageIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Message IDs to change (for batchModify)"
+          },
           "threadId": {
-            "type": "string"
+            "type": "string",
+            "description": "Thread to change (for modifyThread) or to add the draft to (for createDraft)"
+          },
+          "attachmentId": {
+            "type": "string",
+            "description": "Attachment ID from get (for downloadAttachment)"
+          },
+          "localPath": {
+            "type": "string",
+            "description": "Absolute local file path to save the attachment to (for downloadAttachment). This action is available only over local stdio transport."
           },
           "to": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Recipient email address, or an array of addresses"
+          },
+          "cc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Cc email address, or an array of addresses"
+          },
+          "bcc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "Bcc email address, or an array of addresses"
+          },
+          "replyTo": {
+            "type": "string",
+            "description": "Reply-To email address"
           },
           "subject": {
             "type": "string"
@@ -408,15 +674,75 @@
           "body": {
             "type": "string"
           },
+          "isHtml": {
+            "type": "boolean",
+            "description": "Treat body as HTML instead of plain text (default false)"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filePath": {
+                  "type": "string",
+                  "description": "Absolute local filesystem path to the file to attach (e.g., \"/Users/name/downloads/report.pdf\"). Use the downloadAttachment action first to save an email attachment locally before referencing it here."
+                },
+                "filename": {
+                  "type": "string",
+                  "description": "Display name for the attachment in the email. Defaults to the filename portion of filePath."
+                },
+                "mimeType": {
+                  "type": "string",
+                  "description": "MIME type of the attachment (e.g., \"application/pdf\"). Inferred from the file extension when omitted; falls back to \"application/octet-stream\"."
+                }
+              },
+              "required": ["filePath"]
+            },
+            "description": "Local files to attach (for createDraft). Attachments are read from the server filesystem, so they are available only over local stdio transport."
+          },
           "draftId": {
             "type": "string"
           },
           "labelIds": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Restrict search to these label IDs"
+          },
+          "addLabelIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Label IDs to add (for modify, batchModify, modifyThread)"
+          },
+          "removeLabelIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Label IDs to remove (for modify, batchModify, modifyThread)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Label name (for createLabel)"
+          },
+          "labelListVisibility": {
+            "type": "string",
+            "enum": ["labelShow", "labelHide", "labelShowIfUnread"],
+            "description": "Label visibility in the label list (for createLabel; default labelShow)"
+          },
+          "messageListVisibility": {
+            "type": "string",
+            "enum": ["show", "hide"],
+            "description": "Label visibility in the message list (for createLabel; default show)"
           },
           "maxResults": {
-            "type": "number",
-            "description": "Maximum messages returned per page (bounded by Gmail)"
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum messages per page (for search; 1-100, default 20)"
           },
           "pageToken": {
             "type": "string",
@@ -427,7 +753,9 @@
             "description": "Include spam and trash in search results"
           },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
           },
           "full": {
@@ -437,7 +765,7 @@
           "format": {
             "type": "string",
             "enum": ["minimal", "full", "raw", "metadata"],
-            "description": "Message payload detail"
+            "description": "Message payload detail (for get; default full)"
           }
         },
         "required": ["action"]
@@ -445,7 +773,7 @@
     },
     {
       "name": "slides",
-      "description": "Slides operations. Actions: getText, getMetadata, getImages, create, addSlide, deleteSlide, duplicateSlide, reorderSlides, getSpeakerNotes, updateSpeakerNotes, replaceAllText, insertText, deleteText, addShape, addImage, addTable, updateTextStyle, updateShapeProperties, getSlideThumbnail.\n\ngetText, getMetadata, getImages and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide or image entries. getSlideThumbnail returns one base64 image and is never cut. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).",
+      "description": "Slides operations. Actions: getText, getMetadata, create, addSlide, deleteSlide, duplicateSlide, reorderSlides, getSpeakerNotes, updateSpeakerNotes, replaceAllText, insertText, deleteText, addShape, addImage, addTable, updateTextStyle, updateShapeProperties.\n\ngetText, getMetadata and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide entries. Truncated output names its true size and how to fetch the rest. Positions and sizes are in points (PT). account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: getImages saves every image as a PNG in the localPath directory and is bounded like the reads above, at most 100 image entries; getSlideThumbnail saves the thumbnail PNG of the slideObjectId slide to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.",
       "annotations": {
         "title": "Slides",
         "readOnlyHint": false,
@@ -486,24 +814,146 @@
             "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
           },
           "presentationId": {
-            "type": "string"
+            "type": "string",
+            "description": "Presentation ID or URL (all actions except create)"
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "Presentation title (for create)"
           },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
           },
           "full": {
             "type": "boolean",
             "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
           },
-          "slideId": {
-            "type": "string"
+          "localPath": {
+            "type": "string",
+            "description": "Absolute local directory to save every image to (for getImages), or absolute local file path to save the thumbnail to (for getSlideThumbnail). These actions are available only over local stdio transport."
+          },
+          "slideObjectId": {
+            "type": "string",
+            "description": "Slide object ID (for deleteSlide, duplicateSlide, updateSpeakerNotes, addShape, addImage, addTable)"
+          },
+          "slideObjectIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Slide object IDs to move, listed in their current deck order (for reorderSlides)"
+          },
+          "objectId": {
+            "type": "string",
+            "description": "Object ID of the shape or text box to edit (for insertText, deleteText, updateTextStyle, updateShapeProperties), or an optional ID for the new slide or element (for addSlide, addShape, addImage, addTable)"
+          },
+          "insertionIndex": {
+            "type": "number",
+            "description": "Zero-based position: where the new slide goes (for addSlide; default end), where the moved slides go (for reorderSlides), or the character index to insert at (for insertText; default 0)"
+          },
+          "layoutId": {
+            "type": "string",
+            "description": "Layout object ID of the new slide (for addSlide)"
+          },
+          "predefinedLayout": {
+            "type": "string",
+            "enum": [
+              "BLANK",
+              "TITLE",
+              "TITLE_AND_BODY",
+              "TITLE_AND_TWO_COLUMNS",
+              "TITLE_ONLY",
+              "SECTION_HEADER",
+              "SECTION_TITLE_AND_DESCRIPTION",
+              "ONE_COLUMN_TEXT",
+              "MAIN_POINT",
+              "BIG_NUMBER"
+            ],
+            "description": "Predefined layout of the new slide (for addSlide)"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Speaker notes text (for updateSpeakerNotes)"
+          },
+          "findText": {
+            "type": "string",
+            "description": "Text to find in every slide (for replaceAllText)"
+          },
+          "replaceText": {
+            "type": "string",
+            "description": "Replacement text (for replaceAllText)"
+          },
+          "matchCase": {
+            "type": "boolean",
+            "description": "Match case when finding text (for replaceAllText; default true)"
           },
           "text": {
-            "type": "string"
+            "type": "string",
+            "description": "Text to insert (for insertText)"
+          },
+          "range": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["ALL", "FIXED_RANGE", "FROM_START_INDEX"]
+              },
+              "startIndex": {
+                "type": "number"
+              },
+              "endIndex": {
+                "type": "number"
+              }
+            },
+            "required": ["type"],
+            "description": "Text range (for deleteText, updateTextStyle; default {\"type\": \"ALL\"}). FIXED_RANGE needs startIndex and endIndex; FROM_START_INDEX needs startIndex."
+          },
+          "shapeType": {
+            "type": "string",
+            "description": "Slides API shape type, e.g. TEXT_BOX or RECTANGLE (for addShape)"
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "Publicly reachable image URL (for addImage)"
+          },
+          "rows": {
+            "type": "number",
+            "description": "Number of table rows (for addTable)"
+          },
+          "columns": {
+            "type": "number",
+            "description": "Number of table columns (for addTable)"
+          },
+          "x": {
+            "type": "number",
+            "description": "Left offset in points (for addShape, addImage, addTable)"
+          },
+          "y": {
+            "type": "number",
+            "description": "Top offset in points (for addShape, addImage, addTable)"
+          },
+          "width": {
+            "type": "number",
+            "description": "Width in points (for addShape, addImage, addTable)"
+          },
+          "height": {
+            "type": "number",
+            "description": "Height in points (for addShape, addImage, addTable)"
+          },
+          "style": {
+            "type": "string",
+            "description": "Slides API TextStyle as a JSON object string, e.g. {\"bold\": true} (for updateTextStyle)"
+          },
+          "shapeProperties": {
+            "type": "string",
+            "description": "Slides API ShapeProperties as a JSON object string (for updateShapeProperties)"
+          },
+          "fields": {
+            "type": "string",
+            "description": "Field mask of the properties to change, e.g. \"bold\" (for updateTextStyle, updateShapeProperties)"
           }
         },
         "required": ["action"]
@@ -537,8 +987,15 @@
           "range": {
             "type": "string"
           },
+          "format": {
+            "type": "string",
+            "enum": ["text", "csv", "json"],
+            "description": "Output format of getText (default text)"
+          },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by getText/getRange (1-100000; default 20000)"
           },
           "full": {
@@ -584,10 +1041,42 @@
             "type": "string"
           },
           "due": {
-            "type": "string"
+            "type": "string",
+            "description": "Due date as an RFC3339 timestamp (for createTask, updateTask); Google Tasks keeps only the date"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["needsAction", "completed"],
+            "description": "Task status (for updateTask)"
+          },
+          "showCompleted": {
+            "type": "boolean",
+            "description": "Include completed tasks (for listTasks)"
+          },
+          "showDeleted": {
+            "type": "boolean",
+            "description": "Include deleted tasks (for listTasks)"
+          },
+          "showHidden": {
+            "type": "boolean",
+            "description": "Include hidden tasks (for listTasks)"
+          },
+          "showAssigned": {
+            "type": "boolean",
+            "description": "Include tasks assigned to the caller (for listTasks)"
+          },
+          "dueMin": {
+            "type": "string",
+            "description": "Earliest due date, RFC3339 timestamp (for listTasks)"
+          },
+          "dueMax": {
+            "type": "string",
+            "description": "Latest due date, RFC3339 timestamp (for listTasks)"
           },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
           },
           "full": {
@@ -595,8 +1084,10 @@
             "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
           },
           "maxResults": {
-            "type": "number",
-            "description": "Maximum task lists or tasks per page"
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum task lists or tasks per page (for listTaskLists, listTasks; 1-100, default 20)"
           },
           "pageToken": {
             "type": "string",
@@ -629,15 +1120,30 @@
             "description": "Google account email to act as. Defaults to the primary account (config action=\"account_list\")."
           },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
           },
           "full": {
             "type": "boolean",
             "description": "Return the complete payload, bypassing the default 20000-character and item bounds"
           },
-          "resourceName": {
-            "type": "string"
+          "userId": {
+            "type": "string",
+            "description": "Person ID, with or without the people/ prefix (for getUserProfile; for getUserRelations, defaults to the caller)"
+          },
+          "email": {
+            "type": "string",
+            "description": "Email to look up in the directory (for getUserProfile)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name to look up in the directory (for getUserProfile)"
+          },
+          "relationType": {
+            "type": "string",
+            "description": "Keep only relations of this type, e.g. manager or spouse (for getUserRelations)"
           }
         },
         "required": ["action"]
@@ -689,15 +1195,19 @@
             "description": "Response ID (for getResponse)"
           },
           "pageSize": {
-            "type": "number",
-            "description": "Maximum responses to return (for listResponses)"
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Maximum responses per page (for listResponses; 1-100, default 20)"
           },
           "pageToken": {
             "type": "string",
             "description": "Page token from a previous listResponses call"
           },
           "max_chars": {
-            "type": "number",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
             "description": "Maximum characters returned by a bounded read action (1-100000; default 20000)"
           },
           "full": {

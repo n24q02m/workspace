@@ -52,8 +52,8 @@ export const SLIDES_BOUNDS: Record<string, ActionBound> = {
   getMetadata: listRead(100),
   getImages: listRead(100),
   getSpeakerNotes: listRead(100)
-  // getSlideThumbnail is left whole on purpose: its payload is one base64 image,
-  // so a character cap would return a corrupt image rather than a shorter list.
+  // getSlideThumbnail is left unbounded: it writes the image to localPath and
+  // returns only the thumbnail URL, size and saved path, which is short.
 }
 
 /** gmail: message bodies and threads; listings page, but bodies are long. */

@@ -24,7 +24,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { CliHandler } from '@n24q02m/hull'
 import { dispatchTool, HELP_TOPICS } from '../tools/dispatch.js'
 import { DOMAINS } from '../tools/domains/index.js'
-import { INFRA_TOOLS } from '../tools/registry.js'
+import { domainDescription, INFRA_TOOLS } from '../tools/registry.js'
 import { getPackageVersion } from '../version.js'
 
 /** Sink for the command output. Injectable so tests capture instead of printing. */
@@ -88,7 +88,7 @@ function domainSpec(name: string): ToolSpec | undefined {
   return {
     tool: domain.name,
     subcommand: domain.name,
-    description: domain.description,
+    description: domainDescription(domain, true),
     actions: domain.actions,
     props: { account: ACCOUNT_PROP, ...domain.inputProps }
   }
@@ -287,6 +287,11 @@ function coerce(name: string, raw: string, prop: ToolProp): unknown {
     case 'number': {
       const value = Number(raw)
       if (!Number.isFinite(value)) throw new UsageError(`--${name} expects a number, got '${raw}'`)
+      return value
+    }
+    case 'integer': {
+      const value = Number(raw)
+      if (!Number.isInteger(value)) throw new UsageError(`--${name} expects an integer, got '${raw}'`)
       return value
     }
     case 'boolean': {
