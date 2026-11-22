@@ -1094,16 +1094,30 @@ describe('DriveService.downloadFile path traversal guard', () => {
     ['a traversal hidden behind a subdirectory', () => ['sub', '..', '..', 'escape.bin'].join(sep)],
     ['a traversal that climbs well past the filesystem root', () => [...Array(40).fill('..'), 'escape.bin'].join(sep)],
     ['an absolute path beside the project root', () => path.resolve(PROJECT_ROOT, '..', 'escape.bin')],
+    // Not normalized: the path starts with the project root and then climbs out of it.
+    ['an absolute path that climbs out through a dot-dot segment', () => `${PROJECT_ROOT}${sep}..${sep}escape.bin`],
     [
       'an absolute sibling that shares the root directory name as a prefix',
       () => `${PROJECT_ROOT}-sibling${sep}escape.bin`
     ],
     ['the parent of the project root', () => path.dirname(PROJECT_ROOT)]
-  ])('rejects %s before touching the filesystem', async (_label, makePath) => {
+  ])('rejects %s before downloading anything or touching the filesystem', async (_label, makePath) => {
     const result = await newService().downloadFile({ fileId: 'doc-1', localPath: makePath() })
 
     expect(jsonOf(result)).toEqual({ error: 'localPath must be within the project root.' })
+    expect(filesGet).not.toHaveBeenCalled()
     expect(mkdir).not.toHaveBeenCalled()
+    expect(writeFile).not.toHaveBeenCalled()
+  })
+
+  // `path.relative` has no `..` route between two drives and returns the target as is.
+  it.runIf(process.platform === 'win32')('rejects an absolute path on another drive', async () => {
+    const otherDrive = PROJECT_ROOT.toUpperCase().startsWith('Z:') ? 'Y:' : 'Z:'
+
+    const result = await newService().downloadFile({ fileId: 'doc-1', localPath: `${otherDrive}\\escape.bin` })
+
+    expect(jsonOf(result)).toEqual({ error: 'localPath must be within the project root.' })
+    expect(filesGet).not.toHaveBeenCalled()
     expect(writeFile).not.toHaveBeenCalled()
   })
 
@@ -1200,6 +1214,52 @@ describe('DriveService.downloadFile on a real filesystem', () => {
     expect(jsonOf(result)).toEqual({ error: 'localPath must be within the project root.' })
     expect(fs.existsSync(escaped)).toBe(false)
     expect(fs.readdirSync(tmpRoot)).toEqual([])
+  })
+
+  // A junction, not a directory symlink: Windows creates one without extra privileges.
+  it('does not write through a directory link inside the project root that points outside it', async () => {
+    const outside = path.join(container, 'outside')
+    fs.mkdirSync(outside)
+    fs.symlinkSync(outside, path.join(tmpRoot, 'link'), 'junction')
+
+    const result = await newService().downloadFile({
+      fileId: 'doc-1',
+      localPath: ['link', 'nested', 'escape.bin'].join(path.sep)
+    })
+
+    expect(jsonOf(result)).toEqual({ error: 'localPath must be within the project root.' })
+    expect(filesGet).not.toHaveBeenCalled()
+    expect(fs.readdirSync(outside)).toEqual([])
+  })
+
+  it('does not overwrite a file outside the project root through a file symlink inside it', async () => {
+    const outside = path.join(container, 'outside.bin')
+    fs.writeFileSync(outside, 'kept')
+    fs.symlinkSync(outside, path.join(tmpRoot, 'alias.bin'))
+
+    const result = await newService().downloadFile({ fileId: 'doc-1', localPath: 'alias.bin' })
+
+    expect(jsonOf(result)).toEqual({ error: 'localPath must be within the project root.' })
+    expect(fs.readFileSync(outside, 'utf8')).toBe('kept')
+  })
+
+  it('refuses a destination it cannot resolve, through a link loop, before downloading anything', async () => {
+    const loop = path.join(tmpRoot, 'loop')
+    fs.symlinkSync(loop, loop)
+
+    const result = await newService().downloadFile({ fileId: 'doc-1', localPath: ['loop', 'x.bin'].join(path.sep) })
+
+    expect(jsonOf(result).error).toMatch(/ELOOP/)
+    expect(filesGet).not.toHaveBeenCalled()
+  })
+
+  it('still writes through a directory link that stays inside the project root', async () => {
+    fs.mkdirSync(path.join(tmpRoot, 'real'))
+    fs.symlinkSync(path.join(tmpRoot, 'real'), path.join(tmpRoot, 'alias'), 'junction')
+
+    await newService().downloadFile({ fileId: 'doc-1', localPath: ['alias', 'kept.bin'].join(path.sep) })
+
+    expect(fs.readFileSync(path.join(tmpRoot, 'real', 'kept.bin'))).toEqual(Buffer.from([1, 2, 3, 250]))
   })
 
   it('returns an error result and keeps the blocking file when a parent directory is a regular file', async () => {
