@@ -52,10 +52,13 @@ describe('build output', () => {
       'process.stdout.write(JSON.stringify(failures))',
       'process.exit(0)'
     ].join('\n')
+    // execFileSync blocks the worker, so the test timeout cannot stop a hung child:
+    // the child gets its own, inside the test's.
     const out = execFileSync('node', ['--input-type=module', '-e', script], {
       cwd: ROOT,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 80_000
     })
     expect(JSON.parse(out)).toEqual([])
   })
@@ -140,28 +143,33 @@ describe('addJsExtensions', () => {
         "import { here } from '.';",
         "import { up } from '..';",
         "import { u } from './utils/';",
+        "import { u0 } from './utils';",
         'const lazy = () => import(`./b`);',
         "import { c } from /* c */ './b';"
       ].join('\n'),
+      'pkg/sub/a.js': "import { here } from '..';",
       'index.js': 'export const up = 1;',
       'pkg/index.js': 'export const here = 1;',
       // A file beside the directory must not win over `.`, `..` or a specifier that ends in `/`.
       'pkg.js': 'export const here = 0;',
-      'pkg/utils.js': 'export const u = 0;',
+      // Without the `/`, the file wins over the directory index, as in Node's CommonJS resolution.
+      'pkg/utils.js': 'export const u0 = 0;',
       'pkg/utils/index.js': 'export const u = 1;',
       'pkg/b.js': 'export const c = 1;'
     })
 
-    expect(await addJsExtensions(root)).toBe(5)
+    expect(await addJsExtensions(root)).toBe(7)
     expect(readFileSync(join(root, 'pkg/a.js'), 'utf8')).toBe(
       [
         "import { here } from './index.js';",
         "import { up } from '../index.js';",
         "import { u } from './utils/index.js';",
+        "import { u0 } from './utils.js';",
         'const lazy = () => import(`./b.js`);',
         "import { c } from /* c */ './b.js';"
       ].join('\n')
     )
+    expect(readFileSync(join(root, 'pkg/sub/a.js'), 'utf8')).toBe("import { here } from '../index.js';")
   })
 
   it('leaves an import that already names an existing file as written, whatever its extension', async () => {
