@@ -25,8 +25,11 @@ primary.
 
 Every action returns the MCP `CallTool` result shape directly from
 `DocsService` (`{content: [{type: "text", text}], isError?: true}`) -- the
-`docs` tool does not re-wrap it. A failure carries `{"error": "<message>"}`
-as its text and `isError: true` (see `help(topic="overview")`).
+`docs` tool does not re-wrap it. A failure comes back with `isError: true`,
+as `{"error": "<message>"}` text or, for an invalid call, as plain text.
+`formatText` with no usable entry in `formats` returns the plain text
+`No valid formatting requests to apply.` without the flag (see
+`help(topic="overview")`).
 
 ## Examples
 

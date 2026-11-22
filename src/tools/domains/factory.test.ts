@@ -86,7 +86,8 @@ describe('error payload contract', () => {
     ['a null error field', JSON.stringify({ error: null, items: [] })],
     ['an error field that is not a string', JSON.stringify({ error: { code: 404 } })],
     ['a JSON array', JSON.stringify([{ error: 'inside an item' }])],
-    ['plain text that mentions an error', 'error: this line is document text']
+    ['plain text that mentions an error', 'error: this line is document text'],
+    ['text that looks like an error object but does not parse', '{"error": "unterminated']
   ])('leaves %s unflagged', async (_name, text) => {
     const result = await run({ action: 'reply', text })
     expect(result.isError).toBeUndefined()

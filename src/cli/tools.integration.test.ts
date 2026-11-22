@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { type CliIo, runToolSubcommand } from './tools.js'
 
 // No mocks here on purpose: this file proves the CLI really reaches the same
@@ -45,6 +45,26 @@ describe('CLI -> shared dispatch (real handlers)', () => {
     expect(out).toEqual([])
     expect(err.join('\n')).toContain('Unknown action: bogus')
     expect(err.join('\n')).toContain('Valid actions')
+  })
+
+  it('exits 1 with the payload on stderr when the service reports {error}', async () => {
+    // Fault injection, not a mock of the path under test: TimeService catches the
+    // thrown error and returns {"error": ...} without isError, so this exercises
+    // the domain factory flagging that payload and the CLI turning it into exit 1.
+    const spy = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => {
+      throw new Error('no time zone data')
+    })
+    const { io, out, err } = capture()
+
+    try {
+      const code = await runToolSubcommand('time', ['getTimeZone'], io)
+
+      expect(code).toBe(1)
+      expect(out).toEqual([])
+      expect(JSON.parse(err.join('\n'))).toEqual({ error: 'no time zone data' })
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('reads a documentation topic through the MCP help handler', async () => {
