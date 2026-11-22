@@ -7,9 +7,11 @@
  * filters arguments by schema. Wrapping a domain's `inputProps` in
  * `serviceInputProps<Service, typeof ACTIONS>()` makes type-check fail on such
  * a gap, on a property declared with a JSON type its parameter cannot have,
- * and on a property no listed action reads, which a client following the
- * schema would send for nothing. The response bounds `max_chars` and `full`,
- * which the factory reads itself, are allowed alongside.
+ * on a union parameter whose schema leaves out one of its JSON types (a
+ * `string | string[]` needs `anyOf` over both), and on a property no listed
+ * action reads, which a client following the schema would send for nothing.
+ * The response bounds `max_chars` and `full`, which the factory reads itself,
+ * are allowed alongside.
  */
 
 /** The input object (first parameter) of each listed action of `S`. */
@@ -40,15 +42,40 @@ type JsonType<T> = unknown extends T
           ? 'array'
           : 'object'
 
+/** A schema node typed with one of the JSON types `T` allows; other keywords are open. */
+type TypedNode<T> = { readonly type: T; readonly [keyword: string]: unknown }
+
 /**
- * One schema property per parameter, each typed with a JSON type its parameter
- * can take. Other keywords (description, items, enum) and tool-level
- * properties are open, so a missing parameter is reported as such rather than
- * hidden behind excess-property errors on the rest of the literal.
+ * One schema property per parameter: a single `type`, or `anyOf` branches for
+ * a parameter that takes more than one JSON shape, each typed with a JSON type
+ * the parameter can take. Other keywords (description, items, enum) and
+ * tool-level properties are open, so a missing parameter is reported as such
+ * rather than hidden behind excess-property errors on the rest of the literal.
  */
 type ServiceProps<U> = {
-  [K in InputKey<U>]: { readonly type: JsonType<InputValue<U, K>>; readonly [keyword: string]: unknown }
+  [K in InputKey<U>]:
+    | TypedNode<JsonType<InputValue<U, K>>>
+    | { readonly anyOf: readonly TypedNode<JsonType<InputValue<U, K>>>[]; readonly [keyword: string]: unknown }
 } & { readonly [property: string]: unknown }
+
+/** The JSON types a schema property declares: its `type`, or the `type` of every `anyOf` branch. */
+type DeclaredTypes<P> = P extends { readonly type: infer T }
+  ? T
+  : P extends { readonly anyOf: readonly (infer B)[] }
+    ? B extends { readonly type: infer T }
+      ? T
+      : never
+    : never
+
+/** The members of the parameter type `V` that none of the declared JSON types `D` can carry. */
+type Uncovered<V, D> = V extends unknown ? ([Extract<JsonType<V>, D>] extends [never] ? V : never) : never
+
+/** `never` for every advertised parameter whose schema cannot carry one of its type's members. */
+type NoUncoveredMembers<P, U> = {
+  readonly [K in Extract<keyof P, InputKey<U>> as [Uncovered<InputValue<U, K>, DeclaredTypes<P[K]>>] extends [never]
+    ? never
+    : K]: never
+}
 
 /** Tool-level properties `makeDomainRun` reads itself (response bounds) rather than the service. */
 type FactoryProp = 'max_chars' | 'full'
@@ -57,7 +84,11 @@ type FactoryProp = 'max_chars' | 'full'
 type NoUnreadProps<P, U> = { readonly [K in Exclude<keyof P, InputKey<U> | FactoryProp>]: never }
 
 export function serviceInputProps<S, A extends readonly string[]>() {
-  return <const P extends ServiceProps<ActionInput<S, A[number]>> & NoUnreadProps<P, ActionInput<S, A[number]>>>(
+  return <
+    const P extends ServiceProps<ActionInput<S, A[number]>> &
+      NoUnreadProps<P, ActionInput<S, A[number]>> &
+      NoUncoveredMembers<P, ActionInput<S, A[number]>>
+  >(
     props: P
   ): P => props
 }

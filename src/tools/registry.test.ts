@@ -149,26 +149,122 @@ describe('registerTools', () => {
       const byName: Record<string, (typeof tools)[number]> = Object.fromEntries(tools.map((tool) => [tool.name, tool]))
 
       expect(byName.drive.inputSchema.properties).toMatchObject({
-        pageSize: { type: 'number' },
+        pageSize: { type: 'integer' },
         pageToken: { type: 'string' }
       })
       expect(byName.gmail.inputSchema.properties).toMatchObject({
-        maxResults: { type: 'number' },
+        maxResults: { type: 'integer' },
         pageToken: { type: 'string' },
         format: { enum: ['minimal', 'full', 'raw', 'metadata'] }
       })
       expect(byName.chat.inputSchema.properties).toMatchObject({
-        pageSize: { type: 'number' },
+        pageSize: { type: 'integer' },
         pageToken: { type: 'string' }
       })
       expect(byName.tasks.inputSchema.properties).toMatchObject({
-        maxResults: { type: 'number' },
+        maxResults: { type: 'integer' },
         pageToken: { type: 'string' }
       })
       expect(byName.docs.inputSchema.properties).toMatchObject({
-        limit: { type: 'number' },
+        limit: { type: 'integer' },
         preview: { type: 'boolean' }
       })
+    })
+
+    // The factory clamps every paged listing to 1-100 and fills in 20 when the
+    // page size is left out (normalizePageSize), whatever default the vendored
+    // service declares, and rejects a value that is not an integer.
+    it.each([
+      ['drive', 'pageSize'],
+      ['gmail', 'maxResults'],
+      ['chat', 'pageSize'],
+      ['tasks', 'maxResults'],
+      ['calendar', 'maxResults'],
+      ['forms', 'pageSize']
+    ])('advertises the %s %s bounds the factory enforces', async (name, field) => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const tool = result.tools.find((candidate: any) => candidate.name === name)
+
+      expect(tool.inputSchema.properties[field]).toMatchObject({
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description: expect.stringContaining('default 20')
+      })
+    })
+
+    it('advertises max_chars as the integer range resolveResponseBudget accepts', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const withBudget = result.tools.filter((tool: any) => tool.inputSchema.properties.max_chars)
+
+      expect(withBudget.length).toBe(DOMAINS.length - 1)
+      for (const tool of withBudget) {
+        expect(tool.inputSchema.properties.max_chars, tool.name).toMatchObject({
+          type: 'integer',
+          minimum: 1,
+          maximum: 100000
+        })
+      }
+    })
+
+    it('advertises Gmail recipients as one address or an array of addresses', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const gmailTool = result.tools.find((tool: any) => tool.name === 'gmail')
+
+      for (const field of ['to', 'cc', 'bcc']) {
+        expect(gmailTool.inputSchema.properties[field], field).toMatchObject({
+          anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }]
+        })
+      }
+    })
+
+    it('advertises the formatText styles DocsService applies', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const docsTool = result.tools.find((tool: any) => tool.name === 'docs')
+
+      expect(docsTool.inputSchema.properties.formats.items.properties.style.enum).toEqual([
+        'heading1',
+        'heading2',
+        'heading3',
+        'heading4',
+        'heading5',
+        'heading6',
+        'normalText',
+        'bold',
+        'italic',
+        'underline',
+        'strikethrough',
+        'code',
+        'link'
+      ])
+    })
+
+    // The action enum and the properties drop local-only entries for a remote
+    // client; the description must not name them either, or a model reads about
+    // an action it cannot call.
+    it('names no local-only action or parameter in a remote tool description', async () => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+
+      const result = await getHandler(remoteServer, 'tools/list')({ method: 'tools/list' })
+      const byName = Object.fromEntries(result.tools.map((tool: any) => [tool.name, tool]))
+
+      const checked = DOMAINS.filter((domain) => domain.localOnlyActions || domain.localOnlyInputProps)
+      expect(checked.map((domain) => domain.name).sort()).toEqual(['drive', 'gmail', 'slides'])
+      for (const domain of checked) {
+        for (const word of [...(domain.localOnlyActions ?? []), ...(domain.localOnlyInputProps ?? [])]) {
+          expect(byName[domain.name].description, `${domain.name} names ${word}`).not.toContain(word)
+        }
+      }
+    })
+
+    it('describes the local-only actions to local stdio clients', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const byName = Object.fromEntries(result.tools.map((tool: any) => [tool.name, tool]))
+
+      expect(byName.gmail.description).toContain('downloadAttachment')
+      expect(byName.slides.description).toContain('getImages')
+      expect(byName.slides.description).toContain('getSlideThumbnail')
     })
 
     it('does not advertise Drive filesystem writes to remote clients', async () => {

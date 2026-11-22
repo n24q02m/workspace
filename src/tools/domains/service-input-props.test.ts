@@ -16,6 +16,13 @@ class FakeService {
 const FAKE_ACTIONS = ['listThings', 'ping'] as const
 const fakeProps = serviceInputProps<FakeService, typeof FAKE_ACTIONS>()
 
+// A parameter typed as a union of JSON shapes, as Gmail's recipients are.
+class FakeMailer {
+  send = async (_input: { to: string | string[] }) => ({ content: [] })
+}
+const MAILER_ACTIONS = ['send'] as const
+const mailerProps = serviceInputProps<FakeMailer, typeof MAILER_ACTIONS>()
+
 // The checks below are type-level: `bun run type-check` fails when a
 // `@ts-expect-error` line stops being an error, so a helper that no longer
 // rejects a gap turns the check red. The `it` bodies run the same calls so
@@ -84,5 +91,30 @@ describe('serviceInputProps', () => {
     } as const
     // @ts-expect-error -- no action reads folder_id, so a client that sends it is ignored
     expect(fakeProps(props)).toBe(props)
+  })
+
+  it('accepts a union parameter advertised with anyOf over each of its JSON types', () => {
+    const props = mailerProps({
+      to: { anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }], description: 'Recipients' }
+    })
+    expect(props.to.description).toBe('Recipients')
+  })
+
+  it('rejects a union parameter advertised with only one of its JSON types', () => {
+    const props = { to: { type: 'string' } } as const
+    // @ts-expect-error -- send also takes an array of addresses, which the schema forbids
+    expect(mailerProps(props)).toBe(props)
+  })
+
+  it('rejects an anyOf that leaves out one of the parameter JSON types', () => {
+    const props = { to: { anyOf: [{ type: 'array' }] } } as const
+    // @ts-expect-error -- send also takes a single address string, which the schema forbids
+    expect(mailerProps(props)).toBe(props)
+  })
+
+  it('rejects an anyOf branch with a JSON type the parameter cannot have', () => {
+    const props = { to: { anyOf: [{ type: 'string' }, { type: 'array' }, { type: 'object' }] } } as const
+    // @ts-expect-error -- to is never an object
+    expect(mailerProps(props)).toBe(props)
   })
 })

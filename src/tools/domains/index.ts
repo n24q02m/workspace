@@ -32,6 +32,14 @@ import { SLIDES_ACTIONS, slides } from './slides.js'
 import { TASKS_ACTIONS, tasks } from './tasks.js'
 import { TIME_ACTIONS, time } from './time.js'
 
+const GMAIL_LOCAL_ONLY_ACTIONS: readonly string[] = ['downloadAttachment']
+const SLIDES_LOCAL_ONLY_ACTIONS: readonly string[] = ['getImages', 'getSlideThumbnail']
+
+/** The action summary a remote client may read: every action except the local-only ones. */
+function remoteActionList(actions: readonly string[], localOnly: readonly string[]): string {
+  return actions.filter((action) => !localOnly.includes(action)).join(', ')
+}
+
 export interface DomainDef {
   name: string // tool name, e.g. 'docs'
   description: string // tool description (actions summary)
@@ -39,6 +47,7 @@ export interface DomainDef {
   inputProps: Record<string, unknown> // JSON-schema properties beyond action+account
   localOnlyActions?: readonly string[] // unavailable to remote HTTP clients
   localOnlyInputProps?: readonly string[] // omitted with their local-only actions
+  localOnlyDescription?: string // appended to description for local stdio clients only
   run: (input: DomainRunInput) => Promise<CallToolResult>
 }
 
@@ -58,10 +67,17 @@ export const DOMAINS: DomainDef[] = [
         description: 'Insert position for writeText: "beginning", "end" (default), or a positive integer index'
       },
       tabId: { type: 'string', description: 'Tab ID to target (optional, for multi-tab documents)' },
-      limit: { type: 'number', description: 'Maximum Docs text characters for getText (1-100000; default 20000)' },
+      limit: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
+        description: 'Maximum Docs text characters for getText (1-100000; default 20000)'
+      },
       preview: { type: 'boolean', description: 'Use a 2000-character getText preview unless limit is provided' },
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by getSuggestions (1-100000; default 20000)'
       },
       full: {
@@ -77,7 +93,25 @@ export const DOMAINS: DomainDef[] = [
           properties: {
             startIndex: { type: 'number' },
             endIndex: { type: 'number' },
-            style: { type: 'string' },
+            style: {
+              type: 'string',
+              enum: [
+                'heading1',
+                'heading2',
+                'heading3',
+                'heading4',
+                'heading5',
+                'heading6',
+                'normalText',
+                'bold',
+                'italic',
+                'underline',
+                'strikethrough',
+                'code',
+                'link'
+              ],
+              description: 'Heading level, text style, code font, or link (link needs url)'
+            },
             url: { type: 'string' }
           },
           required: ['startIndex', 'endIndex', 'style']
@@ -110,13 +144,20 @@ export const DOMAINS: DomainDef[] = [
       name: { type: 'string' },
       newName: { type: 'string' },
       parentId: { type: 'string' },
-      pageSize: { type: 'number', description: 'Maximum search results per page (default 10)' },
+      pageSize: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description: 'Maximum files or comments per page (for search, getComments; 1-100, default 20)'
+      },
       pageToken: { type: 'string', description: 'Continuation token from a previous search page' },
       corpus: { type: 'string', enum: ['user', 'domain'], description: 'Drive search corpus' },
       unreadOnly: { type: 'boolean', description: 'Restrict search to unread files where supported' },
       sharedWithMe: { type: 'boolean', description: 'Restrict search to files shared with the user' },
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
       },
       full: {
@@ -126,7 +167,7 @@ export const DOMAINS: DomainDef[] = [
       localPath: {
         type: 'string',
         description:
-          'Local destination path for downloadFile. This action is available only over local stdio transport.'
+          'Destination file for downloadFile, inside the server install directory; a relative path resolves against that directory. This action is available only over local stdio transport.'
       }
     }),
     run: drive
@@ -260,10 +301,17 @@ export const DOMAINS: DomainDef[] = [
       },
       responseMessage: { type: 'string', description: 'Comment attached to the answer (for respondToEvent)' },
       duration: { type: 'number', description: 'Length of the free slot to find, in minutes (for findFreeTime)' },
-      maxResults: { type: 'number', description: 'Maximum events per page (for listEvents; default 20)' },
+      maxResults: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description: 'Maximum events per page (for listEvents; 1-100, default 20)'
+      },
       pageToken: { type: 'string', description: 'Continuation token from a previous listEvents page' },
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
       },
       full: {
@@ -298,11 +346,19 @@ export const DOMAINS: DomainDef[] = [
         items: { type: 'string' },
         description: 'Members of the new space, as users/<user ID or email> (for setUpSpace)'
       },
-      pageSize: { type: 'number', description: 'Maximum spaces, messages, or threads per page' },
+      pageSize: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description:
+          'Maximum spaces, messages, or threads per page (for listSpaces, getMessages, listThreads; 1-100, default 20)'
+      },
       pageToken: { type: 'string', description: 'Continuation token from a previous page' },
       unreadOnly: { type: 'boolean', description: 'Return only unread messages' },
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
       },
       full: {
@@ -317,11 +373,13 @@ export const DOMAINS: DomainDef[] = [
     name: 'gmail',
     description:
       'Gmail operations. Actions: ' +
-      GMAIL_ACTIONS.join(', ') +
+      remoteActionList(GMAIL_ACTIONS, GMAIL_LOCAL_ONLY_ACTIONS) +
       '.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).',
     actions: GMAIL_ACTIONS,
-    localOnlyActions: ['downloadAttachment'],
+    localOnlyActions: GMAIL_LOCAL_ONLY_ACTIONS,
     localOnlyInputProps: ['localPath', 'attachments'],
+    localOnlyDescription:
+      '\n\nLocal stdio transport only: downloadAttachment saves an attachment to an absolute localPath on this machine, and createDraft attaches local files through attachments.',
     inputProps: serviceInputProps<GmailService, typeof GMAIL_ACTIONS>()({
       query: { type: 'string' },
       messageId: { type: 'string' },
@@ -336,9 +394,18 @@ export const DOMAINS: DomainDef[] = [
         description:
           'Absolute local file path to save the attachment to (for downloadAttachment). This action is available only over local stdio transport.'
       },
-      to: { type: 'string', description: 'Recipient email address; an array of addresses is accepted too' },
-      cc: { type: 'string', description: 'Cc email address; an array of addresses is accepted too' },
-      bcc: { type: 'string', description: 'Bcc email address; an array of addresses is accepted too' },
+      to: {
+        anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+        description: 'Recipient email address, or an array of addresses'
+      },
+      cc: {
+        anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+        description: 'Cc email address, or an array of addresses'
+      },
+      bcc: {
+        anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+        description: 'Bcc email address, or an array of addresses'
+      },
       replyTo: { type: 'string', description: 'Reply-To email address' },
       subject: { type: 'string' },
       body: { type: 'string' },
@@ -391,18 +458,29 @@ export const DOMAINS: DomainDef[] = [
         enum: ['show', 'hide'],
         description: 'Label visibility in the message list (for createLabel; default show)'
       },
-      maxResults: { type: 'number', description: 'Maximum messages returned per page (bounded by Gmail)' },
+      maxResults: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description: 'Maximum messages per page (for search; 1-100, default 20)'
+      },
       pageToken: { type: 'string', description: 'Continuation token from a previous search page' },
       includeSpamTrash: { type: 'boolean', description: 'Include spam and trash in search results' },
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
       },
       full: {
         type: 'boolean',
         description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
       },
-      format: { type: 'string', enum: ['minimal', 'full', 'raw', 'metadata'], description: 'Message payload detail' }
+      format: {
+        type: 'string',
+        enum: ['minimal', 'full', 'raw', 'metadata'],
+        description: 'Message payload detail (for get; default full)'
+      }
     }),
     run: gmail
   },
@@ -410,16 +488,20 @@ export const DOMAINS: DomainDef[] = [
     name: 'slides',
     description:
       'Slides operations. Actions: ' +
-      SLIDES_ACTIONS.join(', ') +
-      '.\n\ngetText, getMetadata, getImages and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide or image entries. getImages and getSlideThumbnail save PNG files under localPath (local stdio transport only); getSlideThumbnail returns the thumbnail URL, size and saved path and is never cut. Truncated output names its true size and how to fetch the rest. Positions and sizes are in points (PT). account = email of the Google account to use (default: primary).',
+      remoteActionList(SLIDES_ACTIONS, SLIDES_LOCAL_ONLY_ACTIONS) +
+      '.\n\ngetText, getMetadata and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide entries. Truncated output names its true size and how to fetch the rest. Positions and sizes are in points (PT). account = email of the Google account to use (default: primary).',
     actions: SLIDES_ACTIONS,
-    localOnlyActions: ['getImages', 'getSlideThumbnail'],
+    localOnlyActions: SLIDES_LOCAL_ONLY_ACTIONS,
     localOnlyInputProps: ['localPath'],
+    localOnlyDescription:
+      '\n\nLocal stdio transport only: getImages saves every image as a PNG in the localPath directory and is bounded like the reads above, at most 100 image entries; getSlideThumbnail saves the slide thumbnail PNG to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.',
     inputProps: serviceInputProps<SlidesService, typeof SLIDES_ACTIONS>()({
       presentationId: { type: 'string', description: 'Presentation ID or URL (all actions except create)' },
       title: { type: 'string', description: 'Presentation title (for create)' },
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
       },
       full: {
@@ -429,7 +511,7 @@ export const DOMAINS: DomainDef[] = [
       localPath: {
         type: 'string',
         description:
-          'Local directory to save every image to (for getImages), or local file path to save the thumbnail to (for getSlideThumbnail). These actions are available only over local stdio transport.'
+          'Absolute local directory to save every image to (for getImages), or absolute local file path to save the thumbnail to (for getSlideThumbnail). These actions are available only over local stdio transport.'
       },
       slideObjectId: {
         type: 'string',
@@ -512,7 +594,9 @@ export const DOMAINS: DomainDef[] = [
         description: 'Output format of getText (default text)'
       },
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by getText/getRange (1-100000; default 20000)'
       },
       full: {
@@ -546,14 +630,21 @@ export const DOMAINS: DomainDef[] = [
       dueMin: { type: 'string', description: 'Earliest due date, RFC3339 timestamp (for listTasks)' },
       dueMax: { type: 'string', description: 'Latest due date, RFC3339 timestamp (for listTasks)' },
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
       },
       full: {
         type: 'boolean',
         description: 'Return the complete payload, bypassing the default 20000-character and item bounds'
       },
-      maxResults: { type: 'number', description: 'Maximum task lists or tasks per page' },
+      maxResults: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description: 'Maximum task lists or tasks per page (for listTaskLists, listTasks; 1-100, default 20)'
+      },
       pageToken: { type: 'string', description: 'Continuation token from a previous page' }
     }),
     run: tasks
@@ -567,7 +658,9 @@ export const DOMAINS: DomainDef[] = [
     actions: PEOPLE_ACTIONS,
     inputProps: serviceInputProps<PeopleService, typeof PEOPLE_ACTIONS>()({
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
       },
       full: {
@@ -609,10 +702,17 @@ export const DOMAINS: DomainDef[] = [
         description: 'Forms API batchUpdate requests, e.g. [{"createItem": {...}}] (for batchUpdate)'
       },
       responseId: { type: 'string', description: 'Response ID (for getResponse)' },
-      pageSize: { type: 'number', description: 'Maximum responses to return (for listResponses)' },
+      pageSize: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description: 'Maximum responses per page (for listResponses; 1-100, default 20)'
+      },
       pageToken: { type: 'string', description: 'Page token from a previous listResponses call' },
       max_chars: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
+        maximum: 100000,
         description: 'Maximum characters returned by a bounded read action (1-100000; default 20000)'
       },
       full: {

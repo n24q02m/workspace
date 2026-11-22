@@ -29,8 +29,9 @@
   maximum characters returned, integer 1–100000; defaults to 20000.
 - full (getText, getMetadata, getImages, getSpeakerNotes):
   `true` returns the complete payload and ignores `max_chars` and the item bounds.
-- localPath (getImages, getSlideThumbnail): local directory that receives every
-  image (getImages), or local file path of the thumbnail (getSlideThumbnail).
+- localPath (getImages, getSlideThumbnail): absolute local directory that
+  receives every image (getImages), or absolute local file path of the
+  thumbnail (getSlideThumbnail).
   Both actions write to the server's disk, so they are available only over
   local stdio transport.
 
