@@ -220,7 +220,8 @@ export class CalendarService {
 
       // A field error may lack a message, its context, or both: join only the
       // parts it has, and drop a field error that has nothing to show.
-      const fieldErrorList = (details.errors ?? [])
+      const errors = Array.isArray(details.errors) ? details.errors : [];
+      const fieldErrorList = errors
         .map((e) => {
           const context = [e.domain, e.locationType, e.location]
             .filter(Boolean)
@@ -233,10 +234,11 @@ export class CalendarService {
       if (fieldErrorList.length) {
         const fieldErrors = fieldErrorList.join('; ');
         const onlyMessage =
-          details.errors?.length === 1 ? details.errors[0].message : undefined;
+          errors.length === 1 ? errors[0].message : undefined;
 
-        // If the top-level message is just a generic summary of the only field error,
-        // or if they are identical, just show the field errors to avoid stutter.
+        // If the top-level message is just a generic summary of the only field
+        // error, or if they are identical, just show the field errors to avoid
+        // stutter.
         if (onlyMessage && topLevelMessage.includes(onlyMessage)) {
           return `${fieldErrors}${code}`;
         }

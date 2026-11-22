@@ -1231,5 +1231,12 @@ describe('DocsService (behavior over a mocked Docs API)', () => {
       expect(documentsGet).not.toHaveBeenCalled()
       expect(mocks.documentsBatchUpdate).not.toHaveBeenCalled()
     })
+
+    it('still replaces a findText made only of whitespace, which is not empty', async () => {
+      documentsGet.mockResolvedValue({ data: { tabs: [tab('t1', 'One', [para('a b c')])] } })
+      await newService().replaceText({ documentId: 'doc1', findText: ' ', replaceText: '_' })
+
+      expect(sentRequests()).toEqual([del('t1', 2, 3), ins('t1', 2, '_'), del('t1', 4, 5), ins('t1', 4, '_')])
+    })
   })
 })

@@ -42,9 +42,9 @@ as CONFLICT and leaves them alone; whoever syncs merges them by hand:
 - src/vendored/services/DriveService.ts — SECURITY: Prevent path traversal in relative localPath; BOUNDS:
   `getComments` takes `pageSize`/`pageToken` and returns `nextPageToken` instead of a bare array that
   dropped the cursor.
-- src/vendored/services/CalendarService.ts — PERFORMANCE: Using Date.parse() instead of new Date().getTime() skips object allocation and reduces GC pressure; BOUNDS: `listEvents` takes `maxResults`/`pageToken` and returns `{events, nextPageToken}` instead of a bare array that dropped the cursor. FIX: Google error text no
-  longer prints `undefined` for a field error without a message, and keeps the top-level message
-  when no field error carries any text.
+- src/vendored/services/CalendarService.ts — PERFORMANCE: Using Date.parse() instead of new Date().getTime() skips object allocation and reduces GC pressure; BOUNDS: `listEvents` takes `maxResults`/`pageToken` and returns `{events, nextPageToken}` instead of a bare array that dropped the cursor.
+  FIX: Google error text no longer prints `undefined` for a field error without a message, and
+  keeps the top-level message when no field error carries any text.
 - src/vendored/utils/MimeHelper.ts — the multipart boundary suffix could be empty
   (`.substring(7)` on a short `Math.random().toString(36)`, e.g. 0.5 -> "0.i"), so two messages
   built in the same millisecond collided on their boundary. Now a randomUUID-derived suffix.

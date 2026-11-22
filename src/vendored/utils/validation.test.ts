@@ -88,7 +88,10 @@ describe('iso8601DateTimeSchema', () => {
     '2024-02-29T00:00:00Z',
     '2000-02-29T00:00:00Z',
     '0000-02-29T00:00:00Z',
-    '2024-04-30T10:00:00+07:00'
+    '2024-04-30T10:00:00+07:00',
+    // The written date is checked, not the UTC date: these fall on 02-28 and 03-01 in UTC.
+    '2026-03-01T00:30:00+14:00',
+    '2026-02-28T23:30:00-12:00'
   ])('accepts %s', (value) => {
     expect(iso8601DateTimeSchema.parse(value)).toBe(value)
   })
@@ -123,7 +126,8 @@ describe('iso8601DateTimeSchema', () => {
     ['February 29 in a common year', '2025-02-29T00:00:00Z'],
     ['February 29 in a century that is not a leap year', '2100-02-29T00:00:00Z'],
     ['April 31 with an offset', '2024-04-31T10:00:00+07:00'],
-    ['November 31 with milliseconds', '2023-11-31T23:59:59.999-05:00']
+    ['November 31 with milliseconds', '2023-11-31T23:59:59.999-05:00'],
+    ['February 30 whose UTC date is a real day', '2026-02-30T00:30:00+14:00']
   ])('rejects a date that does not exist even though Date.parse rolls it over (%s)', (_label, value) => {
     expect(Number.isNaN(Date.parse(value))).toBe(false)
     expect(messagesFor(iso8601DateTimeSchema, value)).toEqual([BAD_DATETIME])

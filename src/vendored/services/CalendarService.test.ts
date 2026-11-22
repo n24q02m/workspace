@@ -706,6 +706,12 @@ describe('CalendarService.createEvent', () => {
       expect(body(await create())).toEqual({ error: 'Backend Error (code 503)' })
     })
 
+    it('shows only the top-level message when errors is not an array', async () => {
+      api.events.insert.mockRejectedValue(googleError({ message: 'Bad Request', code: 400, errors: {} }))
+
+      expect(body(await create())).toEqual({ error: 'Bad Request (code 400)' })
+    })
+
     it('falls back to the Error message when the failure is not a Google error response', async () => {
       api.events.insert.mockRejectedValue(new Error('socket hang up'))
 

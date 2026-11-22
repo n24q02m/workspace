@@ -69,7 +69,9 @@ export const iso8601DateTimeSchema = z.string().refine(
     // 03-02), so check the written day against the length of its month.
     const [year, month, day] = val.slice(0, 10).split('-').map(Number);
     const leapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-    const monthDays = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    const monthDays = [
+      31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+    ];
     return day <= monthDays[month - 1];
   },
   {

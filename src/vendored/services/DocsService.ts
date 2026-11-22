@@ -740,7 +740,8 @@ export class DocsService {
       `[DocsService] Starting replaceText for document: ${documentId}, tabId: ${tabId}`,
     );
     try {
-      // An empty findText matches at every index, so the search below would never advance.
+      // An empty findText matches at every index, so the search below would
+      // never advance.
       if (!findText) {
         throw new Error('findText must not be empty.');
       }
