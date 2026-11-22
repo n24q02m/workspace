@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { type CliIo, runToolSubcommand } from './tools.js'
 
-// No mocks here on purpose: this file proves the CLI really reaches the same
-// dispatch the MCP server uses, down to the domain handler and its validation.
-// `time` is the one domain that needs no Google account and no network, so the
-// whole path (argv -> dispatchTool -> domain.run -> TimeService) runs for real.
+// No mocks of the path under test here on purpose: this file proves the CLI
+// really reaches the same dispatch the MCP server uses, down to the domain
+// handler and its validation. `time` is the one domain that needs no Google
+// account and no network, so the whole path (argv -> dispatchTool -> domain.run
+// -> TimeService) runs for real. The one exception is fault injection: the
+// {error} test makes Intl.DateTimeFormat throw so TimeService takes its own
+// error branch, and nothing between the CLI and that branch is replaced.
 function capture() {
   const out: string[] = []
   const err: string[] = []
