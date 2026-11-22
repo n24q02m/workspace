@@ -97,6 +97,43 @@ describe('WorkspaceAuth', () => {
     await auth.clear()
   })
 
+  it('serializes concurrent "tokens" events without racing on disk', async () => {
+    const auth = new WorkspaceAuth(['openid'])
+    await auth.saveTokens(
+      { access_token: 'at', refresh_token: 'rt', expiry_date: Date.now() + 3600_000 },
+      { email: 'race@example.com' }
+    )
+    const client = await auth.getAuthenticatedClient()
+    const saveTokensSpy = vi.spyOn(auth, 'saveTokens')
+
+    for (let i = 1; i <= 4; i++) {
+      client.emit('tokens', { access_token: `at-${i}`, expiry_date: Date.now() + 7200_000 + i })
+    }
+    await Promise.all(saveTokensSpy.mock.results.map((r) => r.value))
+
+    const latest = await auth.getAuthenticatedClient()
+    expect(latest.credentials.access_token).toBe('at-4')
+    expect(latest.credentials.refresh_token).toBe('rt')
+    await auth.clear()
+  })
+
+  it('swallows saveTokens failures in the "tokens" listener and keeps saveTokens usable after a rejection', async () => {
+    const auth = new WorkspaceAuth(['openid'])
+    await expect(auth.saveTokens({ access_token: 'no-email' })).rejects.toThrow(/without an account email/i)
+
+    await auth.saveTokens(
+      { access_token: 'at', refresh_token: 'rt', expiry_date: Date.now() + 3600_000 },
+      { email: 'recover@example.com' }
+    )
+    const client = await auth.getAuthenticatedClient()
+    const saveTokensSpy = vi.spyOn(auth, 'saveTokens').mockRejectedValueOnce(new Error('disk full'))
+
+    client.emit('tokens', { access_token: 'new-at' })
+    expect(saveTokensSpy).toHaveBeenCalledTimes(1)
+    await expect(saveTokensSpy.mock.results[0]?.value).rejects.toThrow('disk full')
+    await auth.clear()
+  })
+
   it('serves different credentials for two accounts', async () => {
     const auth = new WorkspaceAuth(['openid'])
     await auth.saveTokens({ access_token: 'at-one', refresh_token: 'rt-one' }, { email: 'one@example.com' })

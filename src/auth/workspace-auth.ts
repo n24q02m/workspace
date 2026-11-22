@@ -13,6 +13,7 @@ export interface GoogleTokens {
 
 export class WorkspaceAuth {
   private accounts: AccountStore
+  private saveChain: Promise<void> = Promise.resolve()
 
   // scopes kept for parity with the upstream AuthManager(scopes) contract; not currently read
   // by the OAuth setup flow, which uses its own WORKSPACE_SCOPES (see oauth-setup.ts).
@@ -27,28 +28,38 @@ export class WorkspaceAuth {
   }
 
   /** Lưu token cho một account. Trả về email đã dùng làm key. */
-  async saveTokens(tokens: GoogleTokens, opts: { email?: string; makePrimary?: boolean } = {}): Promise<string> {
-    // Google's raw token response carries expires_in (relative seconds), not expiry_date
-    // (absolute ms). Compute it here so getAuthenticatedClient can refresh proactively
-    // instead of only reacting to a 401.
-    const record = { ...tokens } as AccountRecord
-    const rawExpiresIn = (tokens as unknown as Record<string, unknown>).expires_in
-    if (record.expiry_date === undefined && typeof rawExpiresIn === 'number') {
-      record.expiry_date = Date.now() + rawExpiresIn * 1000
+  saveTokens(tokens: GoogleTokens, opts: { email?: string; makePrimary?: boolean } = {}): Promise<string> {
+    const run = async (): Promise<string> => {
+      // Google's raw token response carries expires_in (relative seconds), not expiry_date
+      // (absolute ms). Compute it here so getAuthenticatedClient can refresh proactively
+      // instead of only reacting to a 401.
+      const record = { ...tokens } as AccountRecord
+      const rawExpiresIn = (tokens as unknown as Record<string, unknown>).expires_in
+      if (record.expiry_date === undefined && typeof rawExpiresIn === 'number') {
+        record.expiry_date = Date.now() + rawExpiresIn * 1000
+      }
+      const email = opts.email?.trim().toLowerCase() ?? emailFromIdToken(tokens.id_token)
+      if (!email) {
+        throw new Error(
+          'Cannot store Google tokens without an account email (no id_token email claim and none passed).'
+        )
+      }
+      // absorbLegacy: hai caller ngoài (runOAuthSetup, startAddAccount) đều đứng ngay
+      // sau một lần consent người dùng vừa hoàn tất, nên ghi là đúng ý họ -- và nếu
+      // KHÔNG hấp thụ thì một lần adopt thất bại (cần mạng) sẽ khoá người dùng ngoài
+      // server: guard chặn chính lần ghi này, mà setup_reset lại cần server đang chạy.
+      // Caller thứ ba là listener 'tokens' của buildClient (auto-refresh, không phải
+      // consent); đường đó chỉ chạy khi blob v2 đã tồn tại, nên cờ này không tới lượt
+      // được đọc ở đó.
+      await this.accounts.put(email, record, { makePrimary: opts.makePrimary, absorbLegacy: true })
+      return email
     }
-    const email = opts.email?.trim().toLowerCase() ?? emailFromIdToken(tokens.id_token)
-    if (!email) {
-      throw new Error('Cannot store Google tokens without an account email (no id_token email claim and none passed).')
-    }
-    // absorbLegacy: hai caller ngoài (runOAuthSetup, startAddAccount) đều đứng ngay
-    // sau một lần consent người dùng vừa hoàn tất, nên ghi là đúng ý họ -- và nếu
-    // KHÔNG hấp thụ thì một lần adopt thất bại (cần mạng) sẽ khoá người dùng ngoài
-    // server: guard chặn chính lần ghi này, mà setup_reset lại cần server đang chạy.
-    // Caller thứ ba là listener 'tokens' của buildClient (auto-refresh, không phải
-    // consent); đường đó chỉ chạy khi blob v2 đã tồn tại, nên cờ này không tới lượt
-    // được đọc ở đó.
-    await this.accounts.put(email, record, { makePrimary: opts.makePrimary, absorbLegacy: true })
-    return email
+    const next = this.saveChain.then(run)
+    this.saveChain = next.then(
+      () => undefined,
+      () => undefined
+    )
+    return next
   }
 
   async listAccounts(): Promise<{ accounts: string[]; primary: string | null }> {
@@ -106,7 +117,9 @@ export class WorkspaceAuth {
     // google-auth-library's 'tokens' event omits refresh_token on a refresh grant
     // (it's re-attached by the library AFTER this emit). Never flip to {...t, ...record}.
     client.on('tokens', (t) => {
-      void this.saveTokens({ ...record, ...t } as GoogleTokens, { email })
+      void this.saveTokens({ ...record, ...t } as GoogleTokens, { email }).catch(() => {
+        /* best-effort persistence on auto-refresh; caller already holds fresh credentials in memory */
+      })
     })
     return client
   }
