@@ -27,7 +27,7 @@ repos:
     hooks:
       - id: biome-check
         name: biome check
-        entry: bun x biome check --write
+        entry: bun x biome check --write --no-errors-on-unmatched
         language: system
         types_or: [javascript, ts, tsx, jsx, json, css]
         pass_filenames: true

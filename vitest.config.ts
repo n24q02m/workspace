@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vitest/config'
 import { parseNotice } from './scripts/sync-upstream.mjs'
 
-// NOTICE sorts every file under src/vendored/. Upstream code -- byte-identical or
-// forked -- stays out of the gate; the shims and files this repo added are ours
-// and count toward it like src/tools/** and src/auth/**.
+// NOTICE sorts every file under src/vendored/. Only the files kept byte-identical
+// with upstream stay out of the gate, since every sync overwrites them. Forked
+// files carry our changes on top of upstream code, and the shims and files this
+// repo added are ours: all of them count toward it like src/tools/** and src/auth/**.
 const vendored = parseNotice(readFileSync(new URL('./NOTICE', import.meta.url), 'utf8'))
 
 export default defineConfig({
@@ -20,7 +21,7 @@ export default defineConfig({
       // *.ts only -- `src/**` also matches the non-code doc fixtures under
       // src/docs/*.md, which the v8 provider then fails to parse as JS.
       include: ['src/**/*.ts'],
-      exclude: ['node_modules/', 'build/', 'bin/', ...vendored.synced, ...vendored.forked],
+      exclude: ['node_modules/', 'build/', 'bin/', ...vendored.synced],
       // Global (aggregate) gate over our code -- fails `test:coverage` on
       // regression.
       thresholds: { lines: 95, functions: 95, branches: 95, statements: 95 }

@@ -11,9 +11,9 @@ src/vendored/ is listed in exactly one section (a test enforces it). The script 
 list is unparseable or names a file that is not on disk -- an empty list would otherwise read as
 "nothing is protected" and overwrite every fork in silence.
 
-`vitest.config.ts` reads the same lists: the files that are ours (the last two sections) count
-toward the 95% coverage gate; byte-identical and forked files do not, since most of their code is
-still upstream's.
+`vitest.config.ts` reads the same lists: forked files and the files that are ours (the last two
+sections) count toward the 95% coverage gate; byte-identical files do not, since every sync
+overwrites them.
 
 ## Files kept byte-identical with upstream
 
