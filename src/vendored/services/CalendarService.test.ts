@@ -787,6 +787,18 @@ describe('CalendarService.listEvents', () => {
     )
   })
 
+  it('treats an empty timeMax as omitted and ends the window thirty days from now', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-10T08:30:00.000Z'))
+    api.events.list.mockResolvedValue({ data: { items: [] } })
+
+    await newService().listEvents({ calendarId: 'cal-1', timeMin: '2026-01-10T09:00:00Z', timeMax: '' })
+
+    expect(api.events.list).toHaveBeenCalledWith(
+      expect.objectContaining({ timeMin: '2026-01-10T09:00:00Z', timeMax: '2026-02-09T08:30:00.000Z' })
+    )
+  })
+
   it('looks up the primary calendar when no calendarId is given', async () => {
     api.calendarList.list.mockResolvedValue({ data: { items: [{ id: 'me@x.com', primary: true }] } })
     api.events.list.mockResolvedValue({ data: { items: [] } })
@@ -794,6 +806,60 @@ describe('CalendarService.listEvents', () => {
     await newService().listEvents({ timeMin: '2026-03-01T00:00:00Z', timeMax: '2026-03-08T00:00:00Z' })
 
     expect(api.events.list).toHaveBeenCalledWith(expect.objectContaining({ calendarId: 'me@x.com' }))
+  })
+
+  describe('validation', () => {
+    it('rejects a timeMin of February 30 without calling Google', async () => {
+      const res = await newService().listEvents({ timeMin: '2026-02-30T00:00:00Z', timeMax: '2026-03-08T00:00:00Z' })
+
+      expect(body(res)).toMatchObject({ error: 'Invalid input format' })
+      expect(body(res).details).toContain('Invalid ISO 8601 datetime format')
+      expect(api.calendarList.list).not.toHaveBeenCalled()
+      expect(api.events.list).not.toHaveBeenCalled()
+    })
+
+    it('rejects a timeMax that is not ISO 8601', async () => {
+      const res = await newService().listEvents({
+        calendarId: 'cal-1',
+        timeMin: '2026-03-01T00:00:00Z',
+        timeMax: 'next week'
+      })
+
+      expect(body(res)).toMatchObject({ error: 'Invalid input format' })
+      expect(api.events.list).not.toHaveBeenCalled()
+    })
+
+    it('rejects an empty timeMin instead of sending it', async () => {
+      const res = await newService().listEvents({ calendarId: 'cal-1', timeMin: '', timeMax: '2026-03-08T00:00:00Z' })
+
+      expect(body(res)).toMatchObject({ error: 'Invalid input format' })
+      expect(api.events.list).not.toHaveBeenCalled()
+    })
+
+    it('rejects six fraction digits, which the shared schema does not take', async () => {
+      const res = await newService().listEvents({
+        calendarId: 'cal-1',
+        timeMin: '2026-03-01T09:00:00.123456Z',
+        timeMax: '2026-03-08T00:00:00Z'
+      })
+
+      expect(body(res)).toMatchObject({ error: 'Invalid input format' })
+      expect(api.events.list).not.toHaveBeenCalled()
+    })
+
+    it('sends milliseconds and a +HH:MM or -HH:MM offset unchanged', async () => {
+      api.events.list.mockResolvedValue({ data: { items: [] } })
+
+      await newService().listEvents({
+        calendarId: 'cal-1',
+        timeMin: '2026-03-01T09:00:00.123+07:00',
+        timeMax: '2026-03-08T09:00:00-05:00'
+      })
+
+      expect(api.events.list).toHaveBeenCalledWith(
+        expect.objectContaining({ timeMin: '2026-03-01T09:00:00.123+07:00', timeMax: '2026-03-08T09:00:00-05:00' })
+      )
+    })
   })
 
   describe('pagination (fork: maxResults/pageToken in, nextPageToken out)', () => {
