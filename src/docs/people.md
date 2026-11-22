@@ -8,7 +8,9 @@
 ## Parameters
 
 - account (optional): email of the Google account to use; defaults to the primary account.
-- resourceName (getUserProfile, getUserRelations): `people/me` or `people/<id>`.
+- userId (getUserProfile, getUserRelations): person ID, with or without the
+  `people/` prefix; getUserRelations defaults to the caller.
+- email / name (getUserProfile): look the person up in the directory instead.
 - relationType (getUserRelations): filter relations by type, e.g. `spouse`.
 - max_chars (all actions): maximum characters returned, integer 1–100000;
   defaults to 20000.

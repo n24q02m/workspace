@@ -20,6 +20,18 @@ vi.mock('./domains/drive.js', () => ({
   ]
 }))
 
+// Gmail and Slides keep their real action lists; only the dispatch target is
+// replaced, so a test can tell whether a call reached the vendored service.
+vi.mock('./domains/gmail.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./domains/gmail.js')>()),
+  gmail: vi.fn()
+}))
+
+vi.mock('./domains/slides.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./domains/slides.js')>()),
+  slides: vi.fn()
+}))
+
 // `config` is stubbed (no credential store in tests), but CONFIG_ACTIONS comes
 // from the real module: it is the list registry.ts builds the schema enum from,
 // and a hand copy here would stop catching drift between the two.
@@ -57,7 +69,9 @@ import { getState } from '../auth/credential-state.js'
 import { config } from './config.js'
 import { docs } from './domains/docs.js'
 import { drive } from './domains/drive.js'
+import { gmail } from './domains/gmail.js'
 import { DOMAINS } from './domains/index.js'
+import { slides } from './domains/slides.js'
 import { WorkspaceMCPError } from './helpers/errors.js'
 import { registerTools } from './registry.js'
 
@@ -165,6 +179,43 @@ describe('registerTools', () => {
       const driveTool = result.tools.find((tool: any) => tool.name === 'drive')
 
       expect(driveTool.inputSchema.properties.action.enum).not.toContain('downloadFile')
+    })
+
+    it('does not advertise Gmail or Slides filesystem writes to remote clients', async () => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+
+      const result = await getHandler(remoteServer, 'tools/list')({ method: 'tools/list' })
+      const byName = Object.fromEntries(result.tools.map((tool: any) => [tool.name, tool]))
+
+      expect(byName.gmail.inputSchema.properties.action.enum).not.toContain('downloadAttachment')
+      expect(byName.slides.inputSchema.properties.action.enum).not.toContain('getImages')
+      expect(byName.slides.inputSchema.properties.action.enum).not.toContain('getSlideThumbnail')
+      expect(byName.gmail.inputSchema.properties).not.toHaveProperty('localPath')
+      expect(byName.gmail.inputSchema.properties).not.toHaveProperty('attachments')
+      expect(byName.slides.inputSchema.properties).not.toHaveProperty('localPath')
+    })
+
+    it('advertises Gmail draft attachments to local stdio clients', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const gmailTool = result.tools.find((tool: any) => tool.name === 'gmail')
+
+      expect(gmailTool.inputSchema.properties.attachments).toMatchObject({
+        type: 'array',
+        items: { type: 'object', required: ['filePath'] }
+      })
+    })
+
+    it('advertises the calendar time window in the format listEvents and findFreeTime accept', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const calendarTool = result.tools.find((tool: any) => tool.name === 'calendar')
+
+      for (const field of ['timeMin', 'timeMax']) {
+        expect(calendarTool.inputSchema.properties[field]).toMatchObject({
+          type: 'string',
+          description: expect.stringContaining('2026-03-01T09:00:00Z')
+        })
+      }
     })
   })
 
@@ -316,6 +367,66 @@ describe('registerTools', () => {
       expect(result.isError).toBe(true)
       expect(result.content[0].text).toContain('downloadFile is only available in local stdio mode')
       expect(drive).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['gmail', 'downloadAttachment', { messageId: 'm-1', attachmentId: 'a-1', localPath: '/srv/out.bin' }],
+      ['slides', 'getImages', { presentationId: 'p-1', localPath: '/srv/images' }],
+      ['slides', 'getSlideThumbnail', { presentationId: 'p-1', slideObjectId: 's-1', localPath: '/srv/thumb.png' }]
+    ])('rejects a raw remote %s %s request before it reaches the service', async (name, action, args) => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+      const handler = getHandler(remoteServer, 'tools/call')
+
+      const result = await handler({
+        method: 'tools/call',
+        params: { name, arguments: { action, ...args } }
+      })
+
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain(`Action not available in this transport: ${action}`)
+      expect(gmail).not.toHaveBeenCalled()
+      expect(slides).not.toHaveBeenCalled()
+    })
+
+    // createDraft reads each attachments[].filePath from the server's disk and
+    // mails it into the caller's draft, so over HTTP it would hand a remote
+    // client any file the server process can read.
+    it('rejects a raw remote gmail createDraft that attaches server files', async () => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+      const handler = getHandler(remoteServer, 'tools/call')
+
+      const result = await handler({
+        method: 'tools/call',
+        params: {
+          name: 'gmail',
+          arguments: {
+            action: 'createDraft',
+            to: 'someone@example.com',
+            subject: 's',
+            body: 'b',
+            attachments: [{ filePath: '/etc/passwd' }]
+          }
+        }
+      })
+
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('Parameter not available in this transport: attachments')
+      expect(gmail).not.toHaveBeenCalled()
+    })
+
+    it('still sends a remote gmail createDraft without attachments to the service', async () => {
+      vi.mocked(gmail).mockResolvedValue({ content: [{ type: 'text' as const, text: 'draft created' }] })
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+      const handler = getHandler(remoteServer, 'tools/call')
+
+      const args = { action: 'createDraft', to: 'someone@example.com', subject: 's', body: 'b' }
+      const result = await handler({ method: 'tools/call', params: { name: 'gmail', arguments: args } })
+
+      expect(result.isError).toBeFalsy()
+      expect(gmail).toHaveBeenCalledWith(args)
     })
 
     it('dispatches to config and returns its result directly (no re-wrapping)', async () => {

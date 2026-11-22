@@ -29,6 +29,10 @@
   maximum characters returned, integer 1–100000; defaults to 20000.
 - full (getText, getMetadata, getImages, getSpeakerNotes):
   `true` returns the complete payload and ignores `max_chars` and the item bounds.
+- localPath (getImages, getSlideThumbnail): local directory that receives every
+  image (getImages), or local file path of the thumbnail (getSlideThumbnail).
+  Both actions write to the server's disk, so they are available only over
+  local stdio transport.
 
 ## Bounds
 
@@ -41,7 +45,7 @@ bounded by default:
 | `getMetadata` | 20,000 characters, 100 `slides` entries | `full: true` |
 | `getImages` | 20,000 characters, 100 images | `full: true` |
 | `getSpeakerNotes` | 20,000 characters, 100 slides | `full: true` |
-| `getSlideThumbnail` | none -- one base64 image, returned whole | -- |
+| `getSlideThumbnail` | none -- writes the PNG to `localPath` and returns its URL, size and saved path | -- |
 
 Truncation is never silent. A cut payload carries
 `_truncation: {truncated, total_characters, returned_characters, omitted_items?, note}`
