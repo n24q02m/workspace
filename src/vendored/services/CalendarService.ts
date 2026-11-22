@@ -218,24 +218,26 @@ export class CalendarService {
       const topLevelMessage = details.message ?? 'Unknown Error';
       const code = details.code ? ` (code ${details.code})` : '';
 
-      if (details.errors?.length) {
-        const fieldErrors = details.errors
-          .map((e) => {
-            const context = [e.domain, e.locationType, e.location]
-              .filter(Boolean)
-              .join('.');
-            const identity = [context, e.reason].filter(Boolean).join(' ');
-            return identity ? `${identity}: ${e.message}` : e.message;
-          })
-          .join('; ');
+      // A field error may lack a message, its context, or both: join only the
+      // parts it has, and drop a field error that has nothing to show.
+      const fieldErrorList = (details.errors ?? [])
+        .map((e) => {
+          const context = [e.domain, e.locationType, e.location]
+            .filter(Boolean)
+            .join('.');
+          const identity = [context, e.reason].filter(Boolean).join(' ');
+          return [identity, e.message].filter(Boolean).join(': ');
+        })
+        .filter(Boolean);
 
-        // If the top-level message is just a generic summary of the first field error,
+      if (fieldErrorList.length) {
+        const fieldErrors = fieldErrorList.join('; ');
+        const onlyMessage =
+          details.errors?.length === 1 ? details.errors[0].message : undefined;
+
+        // If the top-level message is just a generic summary of the only field error,
         // or if they are identical, just show the field errors to avoid stutter.
-        if (
-          details.errors.length === 1 &&
-          (topLevelMessage === details.errors[0].message ||
-            topLevelMessage.includes(details.errors[0].message ?? ''))
-        ) {
+        if (onlyMessage && topLevelMessage.includes(onlyMessage)) {
           return `${fieldErrors}${code}`;
         }
 

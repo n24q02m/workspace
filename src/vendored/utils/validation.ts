@@ -63,7 +63,14 @@ export const iso8601DateTimeSchema = z.string().refine(
     if (!iso8601Regex.test(val)) return false;
 
     // Additional check: ensure it's a valid date
-    return !isNaN(Date.parse(val));
+    if (isNaN(Date.parse(val))) return false;
+
+    // Date.parse rolls a day past the end of the month over (02-30 becomes
+    // 03-02), so check the written day against the length of its month.
+    const [year, month, day] = val.slice(0, 10).split('-').map(Number);
+    const leapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    const monthDays = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    return day <= monthDays[month - 1];
   },
   {
     message:
