@@ -20,6 +20,12 @@
   integer 1–100000; defaults to 20000.
 - full (search, getComments, findFolder): `true` returns the complete payload and
   ignores `max_chars` and the item bound.
+- localPath (downloadFile): destination file inside the server install
+  directory; a relative path resolves against that directory.
+
+downloadFile writes to the server's disk, so it is available only over local
+stdio transport. A remote client does not see it in the schema, and a call
+that sends it anyway is refused.
 
 ## Bounds
 

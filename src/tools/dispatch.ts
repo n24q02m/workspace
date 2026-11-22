@@ -118,6 +118,19 @@ export async function dispatchTool(
           'Use an action listed in the tool schema.'
         )
       }
+      // A local-only parameter names a path on the server's disk (Gmail draft
+      // attachments are read from it), so a remote call carrying one is
+      // refused even when its action is otherwise available.
+      const localOnlyProp = allowLocalFilesystem
+        ? undefined
+        : domain.localOnlyInputProps?.find((prop) => args[prop] !== undefined)
+      if (localOnlyProp !== undefined) {
+        throw new WorkspaceMCPError(
+          `Parameter not available in this transport: ${localOnlyProp}`,
+          'VALIDATION_ERROR',
+          'Use the parameters listed in the tool schema.'
+        )
+      }
       // `args` arrives as `unknown` values from JSON-RPC / argv; the domain's
       // factory validates `action` against its own list before dispatching.
       return await domain.run(args as DomainRunInput)

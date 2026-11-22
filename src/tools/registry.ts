@@ -61,11 +61,17 @@ function availableInputProps(domain: DomainDef, allowLocalFilesystem: boolean): 
   )
 }
 
+/** The tool description: local stdio clients also read about the local-only actions. */
+export function domainDescription(domain: DomainDef, allowLocalFilesystem: boolean): string {
+  if (!allowLocalFilesystem || !domain.localOnlyDescription) return domain.description
+  return `${domain.description}${domain.localOnlyDescription}`
+}
+
 function domainToolDef(domain: DomainDef, allowLocalFilesystem: boolean) {
   const actions = availableActions(domain, allowLocalFilesystem)
   return {
     name: domain.name,
-    description: domain.description,
+    description: domainDescription(domain, allowLocalFilesystem),
     annotations: {
       title: capitalize(domain.name),
       readOnlyHint: false,

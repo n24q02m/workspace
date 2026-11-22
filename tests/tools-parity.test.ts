@@ -6,10 +6,10 @@ import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { describe, expect, it } from 'vitest'
 import { registerTools } from '../src/tools/registry.js'
 
-// The tool surface a stdio client sees must match the recorded fixture. The fixture
-// is the pre-cutover dump; it only differs where a change was made on purpose --
-// the config tool text, and the `max_chars`/`full` response-bound options (plus
-// calendar's `maxResults`/`pageToken`) that every growing read now advertises.
+// The tool surface a stdio client sees must match the recorded fixture, so any
+// change to a tool name, description or schema shows up as a fixture diff in
+// review. The fixture is regenerated from the built registry when a change is
+// made on purpose; the per-field contracts are asserted in registry.test.ts.
 const here = dirname(fileURLToPath(import.meta.url))
 const expected = JSON.parse(readFileSync(join(here, 'fixtures', 'tools_expected.json'), 'utf8')) as {
   tools: unknown[]

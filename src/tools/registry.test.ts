@@ -20,6 +20,18 @@ vi.mock('./domains/drive.js', () => ({
   ]
 }))
 
+// Gmail and Slides keep their real action lists; only the dispatch target is
+// replaced, so a test can tell whether a call reached the vendored service.
+vi.mock('./domains/gmail.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./domains/gmail.js')>()),
+  gmail: vi.fn()
+}))
+
+vi.mock('./domains/slides.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./domains/slides.js')>()),
+  slides: vi.fn()
+}))
+
 // `config` is stubbed (no credential store in tests), but CONFIG_ACTIONS comes
 // from the real module: it is the list registry.ts builds the schema enum from,
 // and a hand copy here would stop catching drift between the two.
@@ -57,7 +69,9 @@ import { getState } from '../auth/credential-state.js'
 import { config } from './config.js'
 import { docs } from './domains/docs.js'
 import { drive } from './domains/drive.js'
+import { gmail } from './domains/gmail.js'
 import { DOMAINS } from './domains/index.js'
+import { slides } from './domains/slides.js'
 import { WorkspaceMCPError } from './helpers/errors.js'
 import { registerTools } from './registry.js'
 
@@ -135,26 +149,132 @@ describe('registerTools', () => {
       const byName: Record<string, (typeof tools)[number]> = Object.fromEntries(tools.map((tool) => [tool.name, tool]))
 
       expect(byName.drive.inputSchema.properties).toMatchObject({
-        pageSize: { type: 'number' },
+        pageSize: { type: 'integer' },
         pageToken: { type: 'string' }
       })
       expect(byName.gmail.inputSchema.properties).toMatchObject({
-        maxResults: { type: 'number' },
+        maxResults: { type: 'integer' },
         pageToken: { type: 'string' },
         format: { enum: ['minimal', 'full', 'raw', 'metadata'] }
       })
       expect(byName.chat.inputSchema.properties).toMatchObject({
-        pageSize: { type: 'number' },
+        pageSize: { type: 'integer' },
         pageToken: { type: 'string' }
       })
       expect(byName.tasks.inputSchema.properties).toMatchObject({
-        maxResults: { type: 'number' },
+        maxResults: { type: 'integer' },
         pageToken: { type: 'string' }
       })
       expect(byName.docs.inputSchema.properties).toMatchObject({
-        limit: { type: 'number' },
+        limit: { type: 'integer' },
         preview: { type: 'boolean' }
       })
+    })
+
+    // The factory clamps every paged listing to 1-100 and fills in 20 when the
+    // page size is left out (normalizePageSize), whatever default the vendored
+    // service declares, and rejects a value that is not an integer.
+    it.each([
+      ['drive', 'pageSize'],
+      ['gmail', 'maxResults'],
+      ['chat', 'pageSize'],
+      ['tasks', 'maxResults'],
+      ['calendar', 'maxResults'],
+      ['forms', 'pageSize']
+    ])('advertises the %s %s bounds the factory enforces', async (name, field) => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const tool = result.tools.find((candidate: any) => candidate.name === name)
+
+      expect(tool.inputSchema.properties[field]).toMatchObject({
+        type: 'integer',
+        minimum: 1,
+        maximum: 100,
+        description: expect.stringContaining('default 20')
+      })
+    })
+
+    it('advertises max_chars as the integer range resolveResponseBudget accepts', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const withBudget = result.tools.filter((tool: any) => tool.inputSchema.properties.max_chars)
+
+      expect(withBudget.length).toBe(DOMAINS.length - 1)
+      for (const tool of withBudget) {
+        expect(tool.inputSchema.properties.max_chars, tool.name).toMatchObject({
+          type: 'integer',
+          minimum: 1,
+          maximum: 100000
+        })
+      }
+    })
+
+    it('advertises Gmail recipients as one address or an array of addresses', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const gmailTool = result.tools.find((tool: any) => tool.name === 'gmail')
+
+      for (const field of ['to', 'cc', 'bcc']) {
+        expect(gmailTool.inputSchema.properties[field], field).toMatchObject({
+          anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }]
+        })
+      }
+    })
+
+    it('advertises the formatText styles DocsService applies', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const docsTool = result.tools.find((tool: any) => tool.name === 'docs')
+
+      expect(docsTool.inputSchema.properties.formats.items.properties.style.enum).toEqual([
+        'heading1',
+        'heading2',
+        'heading3',
+        'heading4',
+        'heading5',
+        'heading6',
+        'normalText',
+        'bold',
+        'italic',
+        'underline',
+        'strikethrough',
+        'code',
+        'link'
+      ])
+    })
+
+    // The action enum and the properties drop local-only entries for a remote
+    // client; the description must not name them either, or a model reads about
+    // an action it cannot call.
+    it('names no local-only action or parameter in a remote tool description', async () => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+
+      const result = await getHandler(remoteServer, 'tools/list')({ method: 'tools/list' })
+      const byName = Object.fromEntries(result.tools.map((tool: any) => [tool.name, tool]))
+
+      const checked = DOMAINS.filter((domain) => domain.localOnlyActions || domain.localOnlyInputProps)
+      expect(checked.map((domain) => domain.name).sort()).toEqual(['drive', 'gmail', 'slides'])
+      for (const domain of checked) {
+        const tool = byName[domain.name]
+        const texts = [
+          ['description', tool.description],
+          ...Object.entries(tool.inputSchema.properties).map(([prop, schema]: [string, any]) => [
+            `${prop}.description`,
+            schema.description ?? ''
+          ])
+        ]
+        for (const word of [...(domain.localOnlyActions ?? []), ...(domain.localOnlyInputProps ?? [])]) {
+          for (const [where, text] of texts) {
+            expect(text, `${domain.name} ${where} names ${word}`).not.toContain(word)
+          }
+        }
+      }
+    })
+
+    it('describes the local-only actions to local stdio clients', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const byName = Object.fromEntries(result.tools.map((tool: any) => [tool.name, tool]))
+
+      expect(byName.gmail.description).toContain('downloadAttachment')
+      expect(byName.slides.description).toContain('getImages')
+      expect(byName.slides.description).toContain('getSlideThumbnail')
     })
 
     it('does not advertise Drive filesystem writes to remote clients', async () => {
@@ -165,6 +285,43 @@ describe('registerTools', () => {
       const driveTool = result.tools.find((tool: any) => tool.name === 'drive')
 
       expect(driveTool.inputSchema.properties.action.enum).not.toContain('downloadFile')
+    })
+
+    it('does not advertise Gmail or Slides filesystem writes to remote clients', async () => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+
+      const result = await getHandler(remoteServer, 'tools/list')({ method: 'tools/list' })
+      const byName = Object.fromEntries(result.tools.map((tool: any) => [tool.name, tool]))
+
+      expect(byName.gmail.inputSchema.properties.action.enum).not.toContain('downloadAttachment')
+      expect(byName.slides.inputSchema.properties.action.enum).not.toContain('getImages')
+      expect(byName.slides.inputSchema.properties.action.enum).not.toContain('getSlideThumbnail')
+      expect(byName.gmail.inputSchema.properties).not.toHaveProperty('localPath')
+      expect(byName.gmail.inputSchema.properties).not.toHaveProperty('attachments')
+      expect(byName.slides.inputSchema.properties).not.toHaveProperty('localPath')
+    })
+
+    it('advertises Gmail draft attachments to local stdio clients', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const gmailTool = result.tools.find((tool: any) => tool.name === 'gmail')
+
+      expect(gmailTool.inputSchema.properties.attachments).toMatchObject({
+        type: 'array',
+        items: { type: 'object', required: ['filePath'] }
+      })
+    })
+
+    it('advertises the calendar time window in the format listEvents and findFreeTime accept', async () => {
+      const result = await getHandler(server, 'tools/list')({ method: 'tools/list' })
+      const calendarTool = result.tools.find((tool: any) => tool.name === 'calendar')
+
+      for (const field of ['timeMin', 'timeMax']) {
+        expect(calendarTool.inputSchema.properties[field]).toMatchObject({
+          type: 'string',
+          description: expect.stringContaining('2026-03-01T09:00:00Z')
+        })
+      }
     })
   })
 
@@ -316,6 +473,85 @@ describe('registerTools', () => {
       expect(result.isError).toBe(true)
       expect(result.content[0].text).toContain('downloadFile is only available in local stdio mode')
       expect(drive).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['gmail', 'downloadAttachment', { messageId: 'm-1', attachmentId: 'a-1', localPath: '/srv/out.bin' }],
+      ['slides', 'getImages', { presentationId: 'p-1', localPath: '/srv/images' }],
+      ['slides', 'getSlideThumbnail', { presentationId: 'p-1', slideObjectId: 's-1', localPath: '/srv/thumb.png' }]
+    ])('rejects a raw remote %s %s request before it reaches the service', async (name, action, args) => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+      const handler = getHandler(remoteServer, 'tools/call')
+
+      const result = await handler({
+        method: 'tools/call',
+        params: { name, arguments: { action, ...args } }
+      })
+
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain(`Action not available in this transport: ${action}`)
+      expect(gmail).not.toHaveBeenCalled()
+      expect(slides).not.toHaveBeenCalled()
+    })
+
+    // createDraft reads each attachments[].filePath from the server's disk and
+    // mails it into the caller's draft, so over HTTP it would hand a remote
+    // client any file the server process can read.
+    it('rejects a raw remote gmail createDraft that attaches server files', async () => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+      const handler = getHandler(remoteServer, 'tools/call')
+
+      const result = await handler({
+        method: 'tools/call',
+        params: {
+          name: 'gmail',
+          arguments: {
+            action: 'createDraft',
+            to: 'someone@example.com',
+            subject: 's',
+            body: 'b',
+            attachments: [{ filePath: '/etc/passwd' }]
+          }
+        }
+      })
+
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('Parameter not available in this transport: attachments')
+      expect(gmail).not.toHaveBeenCalled()
+    })
+
+    // Dispatch refuses a local-only parameter whatever its value, so a null or a
+    // value on an action that is available remotely is refused as well.
+    it.each([
+      ['gmail', { action: 'get', messageId: 'm-1', localPath: null }, 'localPath'],
+      ['gmail', { action: 'get', messageId: 'm-1', attachmentId: 'a-1' }, 'attachmentId'],
+      ['slides', { action: 'getText', presentationId: 'p-1', localPath: '/srv/out' }, 'localPath']
+    ])('refuses a remote %s call that carries a local-only parameter (%o)', async (name, args, prop) => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+      const handler = getHandler(remoteServer, 'tools/call')
+
+      const result = await handler({ method: 'tools/call', params: { name, arguments: args } })
+
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain(`Parameter not available in this transport: ${prop}`)
+      expect(gmail).not.toHaveBeenCalled()
+      expect(slides).not.toHaveBeenCalled()
+    })
+
+    it('still sends a remote gmail createDraft without attachments to the service', async () => {
+      vi.mocked(gmail).mockResolvedValue({ content: [{ type: 'text' as const, text: 'draft created' }] })
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+      const handler = getHandler(remoteServer, 'tools/call')
+
+      const args = { action: 'createDraft', to: 'someone@example.com', subject: 's', body: 'b' }
+      const result = await handler({ method: 'tools/call', params: { name: 'gmail', arguments: args } })
+
+      expect(result.isError).toBeFalsy()
+      expect(gmail).toHaveBeenCalledWith(args)
     })
 
     it('dispatches to config and returns its result directly (no re-wrapping)', async () => {
