@@ -377,9 +377,9 @@ export const DOMAINS: DomainDef[] = [
       '.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).',
     actions: GMAIL_ACTIONS,
     localOnlyActions: GMAIL_LOCAL_ONLY_ACTIONS,
-    localOnlyInputProps: ['localPath', 'attachments'],
+    localOnlyInputProps: ['attachmentId', 'localPath', 'attachments'],
     localOnlyDescription:
-      '\n\nLocal stdio transport only: downloadAttachment saves an attachment to an absolute localPath on this machine, and createDraft attaches local files through attachments.',
+      '\n\nLocal stdio transport only: downloadAttachment saves the attachmentId attachment of messageId to an absolute localPath on this machine, and createDraft attaches local files through attachments.',
     inputProps: serviceInputProps<GmailService, typeof GMAIL_ACTIONS>()({
       query: { type: 'string' },
       messageId: { type: 'string' },
@@ -494,7 +494,7 @@ export const DOMAINS: DomainDef[] = [
     localOnlyActions: SLIDES_LOCAL_ONLY_ACTIONS,
     localOnlyInputProps: ['localPath'],
     localOnlyDescription:
-      '\n\nLocal stdio transport only: getImages saves every image as a PNG in the localPath directory and is bounded like the reads above, at most 100 image entries; getSlideThumbnail saves the slide thumbnail PNG to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.',
+      '\n\nLocal stdio transport only: getImages saves every image as a PNG in the localPath directory and is bounded like the reads above, at most 100 image entries; getSlideThumbnail saves the thumbnail PNG of the slideObjectId slide to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.',
     inputProps: serviceInputProps<SlidesService, typeof SLIDES_ACTIONS>()({
       presentationId: { type: 'string', description: 'Presentation ID or URL (all actions except create)' },
       title: { type: 'string', description: 'Presentation title (for create)' },
@@ -516,7 +516,7 @@ export const DOMAINS: DomainDef[] = [
       slideObjectId: {
         type: 'string',
         description:
-          'Slide object ID (for deleteSlide, duplicateSlide, updateSpeakerNotes, addShape, addImage, addTable, getSlideThumbnail)'
+          'Slide object ID (for deleteSlide, duplicateSlide, updateSpeakerNotes, addShape, addImage, addTable)'
       },
       slideObjectIds: {
         type: 'array',

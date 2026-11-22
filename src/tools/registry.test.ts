@@ -252,8 +252,18 @@ describe('registerTools', () => {
       const checked = DOMAINS.filter((domain) => domain.localOnlyActions || domain.localOnlyInputProps)
       expect(checked.map((domain) => domain.name).sort()).toEqual(['drive', 'gmail', 'slides'])
       for (const domain of checked) {
+        const tool = byName[domain.name]
+        const texts = [
+          ['description', tool.description],
+          ...Object.entries(tool.inputSchema.properties).map(([prop, schema]: [string, any]) => [
+            `${prop}.description`,
+            schema.description ?? ''
+          ])
+        ]
         for (const word of [...(domain.localOnlyActions ?? []), ...(domain.localOnlyInputProps ?? [])]) {
-          expect(byName[domain.name].description, `${domain.name} names ${word}`).not.toContain(word)
+          for (const [where, text] of texts) {
+            expect(text, `${domain.name} ${where} names ${word}`).not.toContain(word)
+          }
         }
       }
     })
@@ -510,6 +520,25 @@ describe('registerTools', () => {
       expect(result.isError).toBe(true)
       expect(result.content[0].text).toContain('Parameter not available in this transport: attachments')
       expect(gmail).not.toHaveBeenCalled()
+    })
+
+    // Dispatch refuses a local-only parameter whatever its value, so a null or a
+    // value on an action that is available remotely is refused as well.
+    it.each([
+      ['gmail', { action: 'get', messageId: 'm-1', localPath: null }, 'localPath'],
+      ['gmail', { action: 'get', messageId: 'm-1', attachmentId: 'a-1' }, 'attachmentId'],
+      ['slides', { action: 'getText', presentationId: 'p-1', localPath: '/srv/out' }, 'localPath']
+    ])('refuses a remote %s call that carries a local-only parameter (%o)', async (name, args, prop) => {
+      const remoteServer = createServer()
+      registerTools(remoteServer, { allowLocalFilesystem: false })
+      const handler = getHandler(remoteServer, 'tools/call')
+
+      const result = await handler({ method: 'tools/call', params: { name, arguments: args } })
+
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain(`Parameter not available in this transport: ${prop}`)
+      expect(gmail).not.toHaveBeenCalled()
+      expect(slides).not.toHaveBeenCalled()
     })
 
     it('still sends a remote gmail createDraft without attachments to the service', async () => {

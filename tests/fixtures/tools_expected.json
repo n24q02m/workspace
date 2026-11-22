@@ -565,7 +565,7 @@
     },
     {
       "name": "gmail",
-      "description": "Gmail operations. Actions: search, get, modify, batchModify, modifyThread, send, createDraft, sendDraft, listLabels, createLabel.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: downloadAttachment saves an attachment to an absolute localPath on this machine, and createDraft attaches local files through attachments.",
+      "description": "Gmail operations. Actions: search, get, modify, batchModify, modifyThread, send, createDraft, sendDraft, listLabels, createLabel.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: downloadAttachment saves the attachmentId attachment of messageId to an absolute localPath on this machine, and createDraft attaches local files through attachments.",
       "annotations": {
         "title": "Gmail",
         "readOnlyHint": false,
@@ -773,7 +773,7 @@
     },
     {
       "name": "slides",
-      "description": "Slides operations. Actions: getText, getMetadata, create, addSlide, deleteSlide, duplicateSlide, reorderSlides, getSpeakerNotes, updateSpeakerNotes, replaceAllText, insertText, deleteText, addShape, addImage, addTable, updateTextStyle, updateShapeProperties.\n\ngetText, getMetadata and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide entries. Truncated output names its true size and how to fetch the rest. Positions and sizes are in points (PT). account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: getImages saves every image as a PNG in the localPath directory and is bounded like the reads above, at most 100 image entries; getSlideThumbnail saves the slide thumbnail PNG to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.",
+      "description": "Slides operations. Actions: getText, getMetadata, create, addSlide, deleteSlide, duplicateSlide, reorderSlides, getSpeakerNotes, updateSpeakerNotes, replaceAllText, insertText, deleteText, addShape, addImage, addTable, updateTextStyle, updateShapeProperties.\n\ngetText, getMetadata and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide entries. Truncated output names its true size and how to fetch the rest. Positions and sizes are in points (PT). account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: getImages saves every image as a PNG in the localPath directory and is bounded like the reads above, at most 100 image entries; getSlideThumbnail saves the thumbnail PNG of the slideObjectId slide to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.",
       "annotations": {
         "title": "Slides",
         "readOnlyHint": false,
@@ -837,7 +837,7 @@
           },
           "slideObjectId": {
             "type": "string",
-            "description": "Slide object ID (for deleteSlide, duplicateSlide, updateSpeakerNotes, addShape, addImage, addTable, getSlideThumbnail)"
+            "description": "Slide object ID (for deleteSlide, duplicateSlide, updateSpeakerNotes, addShape, addImage, addTable)"
           },
           "slideObjectIds": {
             "type": "array",

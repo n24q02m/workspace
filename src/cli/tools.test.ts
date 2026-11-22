@@ -420,7 +420,9 @@ describe('help', () => {
     const code = await runToolSubcommand('slides', ['--help'], io)
 
     expect(code).toBe(0)
-    expect(out.join('\n')).toContain('getSlideThumbnail saves the slide thumbnail PNG to the localPath file')
+    expect(out.join('\n')).toContain(
+      'getSlideThumbnail saves the thumbnail PNG of the slideObjectId slide to the localPath file'
+    )
   })
 
   it('prints the grouped surface for a bare `workspace help`', async () => {
