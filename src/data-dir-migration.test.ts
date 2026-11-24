@@ -8,8 +8,8 @@ import { migrateLegacyStore, resetStoreMigrationForTesting, StoreMigrationError 
 
 // The two on-disk directories the rename moves state between. Spelled out rather
 // than derived, so a silent slug change in either direction fails here.
-const OLD_DIR = '.better-workspace'
-const NEW_DIR = '.workspace'
+const OLD_DIR = join('.n24q02m', 'better-workspace')
+const NEW_DIR = join('.n24q02m', 'workspace')
 
 const credential = (overrides: Record<string, unknown> = {}) => ({
   access_token: 'old-access-token',
@@ -43,8 +43,29 @@ describe('migrateLegacyStore', () => {
   it('pins the slug pair the migration exists for', () => {
     expect(STORE_PLUGIN).toBe('workspace')
     expect(LEGACY_STORE_PLUGIN).toBe('better-workspace')
-    expect(`.${STORE_PLUGIN}`).toBe(NEW_DIR)
-    expect(`.${LEGACY_STORE_PLUGIN}`).toBe(OLD_DIR)
+    expect(join('.n24q02m', STORE_PLUGIN)).toBe(NEW_DIR)
+    expect(join('.n24q02m', LEGACY_STORE_PLUGIN)).toBe(OLD_DIR)
+  })
+
+  it('migrates a v1 ~/.workspace/ store into ~/.n24q02m/workspace/ non-destructively', async () => {
+    const { createCipheriv, randomBytes } = await import('node:crypto')
+    const payload = credential({ access_token: 'v1-access-token' })
+    const v1Dir = join(home, '.workspace')
+    mkdirSync(v1Dir, { recursive: true })
+    const key = randomBytes(32)
+    writeFileSync(join(v1Dir, '.secret'), key)
+    const iv = randomBytes(12)
+    const cipher = createCipheriv('aes-256-gcm', key, iv)
+    const ct = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()])
+    const tag = cipher.getAuthTag()
+    writeFileSync(join(v1Dir, 'config.json'), Buffer.concat([iv, ct, tag]))
+
+    const report = await migrateLegacyStore()
+
+    expect(report.migrated).toEqual([{ source: v1Dir, sub: null }])
+    expect(existsSync(join(home, NEW_DIR, 'config.json'))).toBe(true)
+    expect(existsSync(join(v1Dir, 'config.json'))).toBe(true)
+    expect(await new PerPluginStore(STORE_PLUGIN).load()).toEqual(payload)
   })
 
   // Branch 1: only the pre-rename store exists -> it still reads after the rename.
@@ -158,6 +179,7 @@ describe('migrateLegacyStore', () => {
   // Branch 5b (every platform): a file where the store directory belongs is the
   // same class of broken install and gets the same clear failure.
   it('reports a pre-rename store path that is not a directory', async () => {
+    mkdirSync(join(home, OLD_DIR, '..'), { recursive: true })
     writeFileSync(join(home, OLD_DIR), 'not a directory')
 
     const failure = await migrateLegacyStore().catch((error: unknown) => error)
@@ -169,7 +191,7 @@ describe('migrateLegacyStore', () => {
   })
 
   it('reports a pre-rename `subs` path that is not a directory', async () => {
-    mkdirSync(join(home, OLD_DIR))
+    mkdirSync(join(home, OLD_DIR), { recursive: true })
     writeFileSync(join(home, OLD_DIR, 'subs'), 'not a directory')
 
     const failure = await migrateLegacyStore().catch((error: unknown) => error)
@@ -183,7 +205,7 @@ describe('migrateLegacyStore', () => {
   // hull reports a blob it cannot decrypt as "not configured"; copying nothing
   // forward keeps the damaged legacy file where the user can still inspect it.
   it('copies nothing forward when the pre-rename credential is corrupt', async () => {
-    mkdirSync(join(home, OLD_DIR))
+    mkdirSync(join(home, OLD_DIR), { recursive: true })
     writeFileSync(join(home, OLD_DIR, 'config.json'), 'not an encrypted blob')
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     try {

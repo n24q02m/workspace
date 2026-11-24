@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { buildCli } from '@n24q02m/hull'
+import { resolveProfile } from '@n24q02m/hull/storage'
 import { authCommand } from './auth/cli-auth.js'
 import { getState, resolveCredentialState } from './auth/credential-state.js'
 import { runOAuthSetup } from './auth/oauth-setup.js'
@@ -115,7 +116,48 @@ export async function bootstrap(selectedMode: string = mode) {
 }
 
 // Builds the console-script CLI and runs it. Exported so the entry wiring is testable.
+function extractProfileFlag(argv: string[]): { profile: string | undefined; rest: string[] } {
+  let profile: string | undefined
+  const rest: string[] = []
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (arg === '--') {
+      rest.push(...argv.slice(i))
+      break
+    }
+    if (arg === '--profile') {
+      if (i + 1 >= argv.length) {
+        throw new Error('Missing value for --profile')
+      }
+      profile = argv[++i]
+      continue
+    }
+    if (arg.startsWith('--profile=')) {
+      const value = arg.slice('--profile='.length)
+      if (!value) {
+        throw new Error('Missing value for --profile')
+      }
+      profile = value
+      continue
+    }
+    rest.push(arg)
+  }
+  return { profile, rest }
+}
+
 export async function runCli(argv: string[]): Promise<void> {
+  let parsed: { profile: string | undefined; rest: string[] }
+  try {
+    parsed = extractProfileFlag(argv)
+    if (parsed.profile !== undefined) {
+      process.env.WORKSPACE_PROFILE = resolveProfile(STORE_PLUGIN, parsed.profile)
+    }
+  } catch (error) {
+    console.error(`[${SERVER_NAME}] ${error instanceof Error ? error.message : String(error)}`)
+    process.exitCode = 2
+    return
+  }
+
   // Before buildCli parses argv: its built-in `config`, `status` and `doctor`
   // commands read the credential store.
   // `WORKSPACE_DATA_DIR` must be in force, and a store written by an earlier
@@ -125,7 +167,7 @@ export async function runCli(argv: string[]): Promise<void> {
   // `--help` is the one place the tool groups and the operator commands have to
   // be told apart; hull's flat list would merge them. Everything else stays
   // hull's: bare/flag argv serves, reserved built-ins stay operator commands.
-  if (argv[0] === '-h' || argv[0] === '--help') {
+  if (parsed.rest[0] === '-h' || parsed.rest[0] === '--help') {
     console.log(cliHelpText())
     process.exitCode = 0
     return
@@ -142,7 +184,7 @@ export async function runCli(argv: string[]): Promise<void> {
     // Credentials are stored under STORE_PLUGIN, so `config`/`status` must read the same slug.
     pluginName: STORE_PLUGIN
   })
-  process.exitCode = await cli(argv)
+  process.exitCode = await cli(parsed.rest)
 }
 
 // Only run the CLI when this file is the entry point, and not inside the test environment.

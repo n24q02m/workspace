@@ -4,15 +4,16 @@
  * that a hostile value cannot walk out of the base.
  *
  * Workspace state is hull's per-plugin credential store, so the base is hull's
- * home directory and the store lands in `<base>/.workspace/`
- * (`config.json` for the single-user bucket, `subs/<sub>/config.json` for the
- * HTTP multi-user ones). The directory name is `STORE_PLUGIN` from
- * src/constants.ts with the leading dot hull's layout adds; a test pins the two
- * together. Stores written by earlier releases under `~/.better-workspace/` are
- * copied forward once at startup (see src/data-dir-migration.ts).
+ * home directory and the store lands in `<base>/.n24q02m/workspace/`
+ * (`config.json` for the single-user bucket, `profiles/<profile>/config.json`
+ * for named profiles, `subs/<sub>/config.json` for HTTP multi-user ones). The
+ * directory name is `dataDirName(STORE_PLUGIN)` from `@n24q02m/hull/storage`; a
+ * test pins the two together. Stores written by earlier releases under
+ * `~/.workspace/` or `~/.better-workspace/` are copied forward once at startup
+ * (see src/data-dir-migration.ts).
  *
  * `WORKSPACE_DATA_DIR` replaces the base outright, so a container can mount a
- * single volume: `-e WORKSPACE_DATA_DIR=/data` -> `/data/.workspace/config.json`.
+ * single volume: `-e WORKSPACE_DATA_DIR=/data` -> `/data/.n24q02m/workspace/config.json`.
  *
  * Guard: a RELATIVE value is resolved against `$HOME` and must stay inside it,
  * so `..`, `../..`, `..\\..` and NUL bytes cannot leave the base. An ABSOLUTE
@@ -25,15 +26,15 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, resolve, sep } from 'node:path'
 // hull derives the store directory from one process-wide home; it exposes that
 // override only under this name (there is no production alias in 0.4.x).
-import { setHomeDirForTesting as overrideHullHomeDir } from '@n24q02m/hull/storage'
+import { dataDirName, setHomeDirForTesting as overrideHullHomeDir } from '@n24q02m/hull/storage'
 import { STORE_PLUGIN } from './constants.js'
 import { type MigrationReport, migrateLegacyStore } from './data-dir-migration.js'
 
 /** Env var that replaces the base directory. */
 export const DATA_DIR_ENV = 'WORKSPACE_DATA_DIR'
 
-/** Directory name this server owns under the base (hull's `.<STORE_PLUGIN>`). */
-export const DATA_DIR_NAME = `.${STORE_PLUGIN}`
+/** Directory name this server owns under the base (hull's `.n24q02m/<STORE_PLUGIN>`). */
+export const DATA_DIR_NAME = dataDirName(STORE_PLUGIN)
 
 /** A `DATA_DIR` value that would leave the base directory. */
 export class DataDirEscapeError extends Error {
@@ -69,7 +70,19 @@ export function resolveBaseDir(env: NodeJS.ProcessEnv = process.env, home: strin
 
 /** Absolute directory holding this server's credential store. */
 export function resolveDataDir(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string {
-  return join(resolveBaseDir(env, home), DATA_DIR_NAME)
+  if (env[DATA_DIR_ENV]?.trim()) {
+    return join(resolveBaseDir(env, home), DATA_DIR_NAME)
+  }
+  const n24Home = env.N24Q02M_HOME?.trim()
+  if (n24Home) {
+    return join(resolve(n24Home), STORE_PLUGIN)
+  }
+  const useXdg = env.N24Q02M_USE_XDG?.trim().toLowerCase()
+  if (useXdg === '1' || useXdg === 'true' || useXdg === 'yes') {
+    const xdg = env.XDG_CONFIG_HOME?.trim() || env.APPDATA?.trim()
+    if (xdg) return join(resolve(xdg), 'n24q02m', STORE_PLUGIN)
+  }
+  return join(resolve(home), DATA_DIR_NAME)
 }
 
 /**

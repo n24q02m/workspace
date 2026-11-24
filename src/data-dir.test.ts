@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { dataDir, PerPluginStore, setHomeDirForTesting } from '@n24q02m/hull/storage'
+import { dataDir, dataDirName, PerPluginStore, setHomeDirForTesting } from '@n24q02m/hull/storage'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LEGACY_STORE_PLUGIN, STORE_PLUGIN } from './constants.js'
 import {
@@ -25,7 +25,17 @@ afterEach(() => {
 
 describe('resolveDataDir', () => {
   it('names the directory hull uses for STORE_PLUGIN', () => {
-    expect(DATA_DIR_NAME).toBe(`.${STORE_PLUGIN}`)
+    expect(DATA_DIR_NAME).toBe(dataDirName(STORE_PLUGIN))
+    expect(DATA_DIR_NAME).toBe(join('.n24q02m', STORE_PLUGIN))
+  })
+
+  it('honors N24Q02M_HOME and N24Q02M_USE_XDG when WORKSPACE_DATA_DIR is unset', () => {
+    const customHome = resolve('/', 'custom', 'n24')
+    expect(resolveDataDir({ N24Q02M_HOME: customHome }, HOME)).toBe(join(customHome, STORE_PLUGIN))
+    const xdgHome = resolve('/', 'xdg', 'cfg')
+    expect(resolveDataDir({ N24Q02M_USE_XDG: '1', XDG_CONFIG_HOME: xdgHome }, HOME)).toBe(
+      join(xdgHome, 'n24q02m', STORE_PLUGIN)
+    )
   })
 
   it('resolves the default data dir under the home directory', () => {
@@ -111,7 +121,7 @@ describe('prepareDataDir', () => {
       // No argument: startup reads the process environment.
       const report = await prepareDataDir()
 
-      expect(report.migrated).toEqual([{ source: join(base, `.${LEGACY_STORE_PLUGIN}`), sub: null }])
+      expect(report.migrated).toEqual([{ source: join(base, '.n24q02m', LEGACY_STORE_PLUGIN), sub: null }])
       expect(existsSync(join(base, DATA_DIR_NAME, 'config.json'))).toBe(true)
       expect(await new PerPluginStore(STORE_PLUGIN).load()).toEqual(payload)
     } finally {
