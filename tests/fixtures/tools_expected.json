@@ -229,7 +229,11 @@
           },
           "localPath": {
             "type": "string",
-            "description": "Destination file for downloadFile, inside the server install directory; a relative path resolves against that directory. This action is available only over local stdio transport."
+            "description": "Destination file for downloadFile, inside the server install directory; a relative path resolves against that directory. Available only over local stdio transport."
+          },
+          "returnBase64": {
+            "type": "boolean",
+            "description": "Return base64-encoded file bytes inline for downloadFile (default when no disk destination is provided; bounded by WORKSPACE_MAX_INLINE_BYTES)."
           }
         },
         "required": ["action"]
@@ -565,7 +569,7 @@
     },
     {
       "name": "gmail",
-      "description": "Gmail operations. Actions: search, get, modify, batchModify, modifyThread, send, createDraft, sendDraft, listLabels, createLabel.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: downloadAttachment saves the attachmentId attachment of messageId to an absolute localPath on this machine, and createDraft attaches local files through attachments.",
+      "description": "Gmail operations. Actions: search, get, downloadAttachment, modify, batchModify, modifyThread, send, createDraft, sendDraft, listLabels, createLabel.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: pass localPath to downloadAttachment to save to an absolute path on this machine (instead of inline base64), and createDraft attaches local files through attachments.",
       "annotations": {
         "title": "Gmail",
         "readOnlyHint": false,
@@ -620,7 +624,11 @@
           },
           "localPath": {
             "type": "string",
-            "description": "Absolute local file path to save the attachment to (for downloadAttachment). This action is available only over local stdio transport."
+            "description": "Absolute local file path to save the attachment to (for downloadAttachment). Available only over local stdio transport."
+          },
+          "returnBase64": {
+            "type": "boolean",
+            "description": "Return base64-encoded attachment bytes inline for downloadAttachment (default when no disk destination is provided; bounded by WORKSPACE_MAX_INLINE_BYTES)."
           },
           "to": {
             "anyOf": [
@@ -773,7 +781,7 @@
     },
     {
       "name": "slides",
-      "description": "Slides operations. Actions: getText, getMetadata, create, addSlide, deleteSlide, duplicateSlide, reorderSlides, getSpeakerNotes, updateSpeakerNotes, replaceAllText, insertText, deleteText, addShape, addImage, addTable, updateTextStyle, updateShapeProperties.\n\ngetText, getMetadata and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide entries. Truncated output names its true size and how to fetch the rest. Positions and sizes are in points (PT). account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: getImages saves every image as a PNG in the localPath directory and is bounded like the reads above, at most 100 image entries; getSlideThumbnail saves the thumbnail PNG of the slideObjectId slide to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.",
+      "description": "Slides operations. Actions: getText, getMetadata, getImages, create, addSlide, deleteSlide, duplicateSlide, reorderSlides, getSpeakerNotes, updateSpeakerNotes, replaceAllText, insertText, deleteText, addShape, addImage, addTable, updateTextStyle, updateShapeProperties, getSlideThumbnail.\n\ngetText, getMetadata and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide entries. Truncated output names its true size and how to fetch the rest. Positions and sizes are in points (PT). account = email of the Google account to use (default: primary).\n\nLocal stdio transport only: pass localPath to getImages to save every image as a PNG in a directory, or to getSlideThumbnail where getSlideThumbnail saves the thumbnail PNG of the slideObjectId slide to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.",
       "annotations": {
         "title": "Slides",
         "readOnlyHint": false,
@@ -833,7 +841,11 @@
           },
           "localPath": {
             "type": "string",
-            "description": "Absolute local directory to save every image to (for getImages), or absolute local file path to save the thumbnail to (for getSlideThumbnail). These actions are available only over local stdio transport."
+            "description": "Absolute local directory to save every image to (for getImages), or absolute local file path to save the thumbnail to (for getSlideThumbnail). Available only over local stdio transport."
+          },
+          "returnBase64": {
+            "type": "boolean",
+            "description": "Return base64-encoded PNG payloads inline for getImages and getSlideThumbnail (default when no disk destination is provided; bounded by WORKSPACE_MAX_INLINE_BYTES)."
           },
           "slideObjectId": {
             "type": "string",
@@ -961,7 +973,7 @@
     },
     {
       "name": "sheets",
-      "description": "Sheets operations. Actions: getText, getRange, getMetadata.\n\ngetText and getRange return at most 20,000 characters by default (max_chars 1-100,000) and mark truncated output explicitly with the true size and omitted count; pass full:true for the complete payload. account = email of the Google account to use (default: primary).",
+      "description": "Sheets operations. Actions: getText, getRange, getMetadata, create, updateRange, appendRows, clearRange, addSheet.\n\ngetText and getRange return at most 20,000 characters by default (max_chars 1-100,000) and mark truncated output explicitly with the true size and omitted count; pass full:true for the complete payload. account = email of the Google account to use (default: primary).",
       "annotations": {
         "title": "Sheets",
         "readOnlyHint": false,
@@ -974,7 +986,16 @@
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["getText", "getRange", "getMetadata"],
+            "enum": [
+              "getText",
+              "getRange",
+              "getMetadata",
+              "create",
+              "updateRange",
+              "appendRows",
+              "clearRange",
+              "addSheet"
+            ],
             "description": "Action to perform"
           },
           "account": {
@@ -986,6 +1007,35 @@
           },
           "range": {
             "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "description": "Spreadsheet title (create) or new tab title (addSheet)"
+          },
+          "sheetTitles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional initial sheet tab titles (create)"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {}
+            },
+            "description": "2D array of rows to write or append (updateRange, appendRows)"
+          },
+          "valueInputOption": {
+            "type": "string",
+            "enum": ["RAW", "USER_ENTERED"],
+            "description": "How input values are interpreted (updateRange, appendRows; default USER_ENTERED)"
+          },
+          "insertDataOption": {
+            "type": "string",
+            "enum": ["OVERWRITE", "INSERT_ROWS"],
+            "description": "How appended data is inserted (appendRows; default INSERT_ROWS)"
           },
           "format": {
             "type": "string",

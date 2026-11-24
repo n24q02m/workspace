@@ -32,21 +32,12 @@ import { SLIDES_ACTIONS, slides } from './slides.js'
 import { TASKS_ACTIONS, tasks } from './tasks.js'
 import { TIME_ACTIONS, time } from './time.js'
 
-const GMAIL_LOCAL_ONLY_ACTIONS: readonly string[] = ['downloadAttachment']
-const SLIDES_LOCAL_ONLY_ACTIONS: readonly string[] = ['getImages', 'getSlideThumbnail']
-
-/** The action summary a remote client may read: every action except the local-only ones. */
-function remoteActionList(actions: readonly string[], localOnly: readonly string[]): string {
-  return actions.filter((action) => !localOnly.includes(action)).join(', ')
-}
-
 export interface DomainDef {
   name: string // tool name, e.g. 'docs'
   description: string // tool description (actions summary)
   actions: readonly string[] // = the vendored service method names
   inputProps: Record<string, unknown> // JSON-schema properties beyond action+account
-  localOnlyActions?: readonly string[] // unavailable to remote HTTP clients
-  localOnlyInputProps?: readonly string[] // omitted with their local-only actions
+  localOnlyInputProps?: readonly string[] // omitted when filesystem access is disabled
   localOnlyDescription?: string // appended to description for local stdio clients only
   run: (input: DomainRunInput) => Promise<CallToolResult>
 }
@@ -134,7 +125,6 @@ export const DOMAINS: DomainDef[] = [
     description:
       'Drive operations. See the action enum for operations available in this transport.\n\nsearch, getComments and findFolder are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload). search and getComments page with pageSize and pageToken; findFolder caps at 50 name matches. Truncated output names its true size and how to fetch the rest. account = email of the Google account to use (default: primary).',
     actions: DRIVE_ACTIONS,
-    localOnlyActions: ['downloadFile'],
     localOnlyInputProps: ['localPath'],
     inputProps: serviceInputProps<DriveService, typeof DRIVE_ACTIONS>()({
       fileId: { type: 'string' },
@@ -167,7 +157,12 @@ export const DOMAINS: DomainDef[] = [
       localPath: {
         type: 'string',
         description:
-          'Destination file for downloadFile, inside the server install directory; a relative path resolves against that directory. This action is available only over local stdio transport.'
+          'Destination file for downloadFile, inside the server install directory; a relative path resolves against that directory. Available only over local stdio transport.'
+      },
+      returnBase64: {
+        type: 'boolean',
+        description:
+          'Return base64-encoded file bytes inline for downloadFile (default when no disk destination is provided; bounded by WORKSPACE_MAX_INLINE_BYTES).'
       }
     }),
     run: drive
@@ -373,13 +368,12 @@ export const DOMAINS: DomainDef[] = [
     name: 'gmail',
     description:
       'Gmail operations. Actions: ' +
-      remoteActionList(GMAIL_ACTIONS, GMAIL_LOCAL_ONLY_ACTIONS) +
+      GMAIL_ACTIONS.join(', ') +
       '.\n\nget, modify, modifyThread, search and listLabels are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload), so a long message body is cut with an explicit marker instead of flooding the response. search pages with maxResults and pageToken. account = email of the Google account to use (default: primary).',
     actions: GMAIL_ACTIONS,
-    localOnlyActions: GMAIL_LOCAL_ONLY_ACTIONS,
-    localOnlyInputProps: ['attachmentId', 'localPath', 'attachments'],
+    localOnlyInputProps: ['localPath', 'attachments'],
     localOnlyDescription:
-      '\n\nLocal stdio transport only: downloadAttachment saves the attachmentId attachment of messageId to an absolute localPath on this machine, and createDraft attaches local files through attachments.',
+      '\n\nLocal stdio transport only: pass localPath to downloadAttachment to save to an absolute path on this machine (instead of inline base64), and createDraft attaches local files through attachments.',
     inputProps: serviceInputProps<GmailService, typeof GMAIL_ACTIONS>()({
       query: { type: 'string' },
       messageId: { type: 'string' },
@@ -392,7 +386,12 @@ export const DOMAINS: DomainDef[] = [
       localPath: {
         type: 'string',
         description:
-          'Absolute local file path to save the attachment to (for downloadAttachment). This action is available only over local stdio transport.'
+          'Absolute local file path to save the attachment to (for downloadAttachment). Available only over local stdio transport.'
+      },
+      returnBase64: {
+        type: 'boolean',
+        description:
+          'Return base64-encoded attachment bytes inline for downloadAttachment (default when no disk destination is provided; bounded by WORKSPACE_MAX_INLINE_BYTES).'
       },
       to: {
         anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
@@ -488,13 +487,12 @@ export const DOMAINS: DomainDef[] = [
     name: 'slides',
     description:
       'Slides operations. Actions: ' +
-      remoteActionList(SLIDES_ACTIONS, SLIDES_LOCAL_ONLY_ACTIONS) +
+      SLIDES_ACTIONS.join(', ') +
       '.\n\ngetText, getMetadata and getSpeakerNotes are bounded: 20,000 characters by default (max_chars 1-100,000, full:true for the complete payload) and at most 100 slide entries. Truncated output names its true size and how to fetch the rest. Positions and sizes are in points (PT). account = email of the Google account to use (default: primary).',
     actions: SLIDES_ACTIONS,
-    localOnlyActions: SLIDES_LOCAL_ONLY_ACTIONS,
     localOnlyInputProps: ['localPath'],
     localOnlyDescription:
-      '\n\nLocal stdio transport only: getImages saves every image as a PNG in the localPath directory and is bounded like the reads above, at most 100 image entries; getSlideThumbnail saves the thumbnail PNG of the slideObjectId slide to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.',
+      '\n\nLocal stdio transport only: pass localPath to getImages to save every image as a PNG in a directory, or to getSlideThumbnail where getSlideThumbnail saves the thumbnail PNG of the slideObjectId slide to the localPath file and returns its URL, size and saved path, never cut. localPath must be absolute.',
     inputProps: serviceInputProps<SlidesService, typeof SLIDES_ACTIONS>()({
       presentationId: { type: 'string', description: 'Presentation ID or URL (all actions except create)' },
       title: { type: 'string', description: 'Presentation title (for create)' },
@@ -511,7 +509,12 @@ export const DOMAINS: DomainDef[] = [
       localPath: {
         type: 'string',
         description:
-          'Absolute local directory to save every image to (for getImages), or absolute local file path to save the thumbnail to (for getSlideThumbnail). These actions are available only over local stdio transport.'
+          'Absolute local directory to save every image to (for getImages), or absolute local file path to save the thumbnail to (for getSlideThumbnail). Available only over local stdio transport.'
+      },
+      returnBase64: {
+        type: 'boolean',
+        description:
+          'Return base64-encoded PNG payloads inline for getImages and getSlideThumbnail (default when no disk destination is provided; bounded by WORKSPACE_MAX_INLINE_BYTES).'
       },
       slideObjectId: {
         type: 'string',
@@ -588,6 +591,30 @@ export const DOMAINS: DomainDef[] = [
     inputProps: serviceInputProps<SheetsService, typeof SHEETS_ACTIONS>()({
       spreadsheetId: { type: 'string' },
       range: { type: 'string' },
+      title: {
+        type: 'string',
+        description: 'Spreadsheet title (create) or new tab title (addSheet)'
+      },
+      sheetTitles: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Optional initial sheet tab titles (create)'
+      },
+      values: {
+        type: 'array',
+        items: { type: 'array', items: {} },
+        description: '2D array of rows to write or append (updateRange, appendRows)'
+      },
+      valueInputOption: {
+        type: 'string',
+        enum: ['RAW', 'USER_ENTERED'],
+        description: 'How input values are interpreted (updateRange, appendRows; default USER_ENTERED)'
+      },
+      insertDataOption: {
+        type: 'string',
+        enum: ['OVERWRITE', 'INSERT_ROWS'],
+        description: 'How appended data is inserted (appendRows; default INSERT_ROWS)'
+      },
       format: {
         type: 'string',
         enum: ['text', 'csv', 'json'],

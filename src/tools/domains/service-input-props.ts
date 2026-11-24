@@ -78,7 +78,7 @@ type NoUncoveredMembers<P, U> = {
 }
 
 /** Tool-level properties `makeDomainRun` reads itself (response bounds) rather than the service. */
-type FactoryProp = 'max_chars' | 'full'
+type FactoryProp = 'max_chars' | 'full' | 'returnBase64'
 
 /** `never` for every property of `P` that neither the service nor the factory reads. */
 type NoUnreadProps<P, U> = { readonly [K in Exclude<keyof P, InputKey<U> | FactoryProp>]: never }

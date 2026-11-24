@@ -103,21 +103,6 @@ export async function dispatchTool(
   try {
     const domain = DOMAIN_MAP.get(name)
     if (domain) {
-      const action = args.action
-      if (!allowLocalFilesystem && typeof action === 'string' && domain.localOnlyActions?.includes(action) === true) {
-        if (name === 'drive' && action === 'downloadFile') {
-          throw new WorkspaceMCPError(
-            'downloadFile is only available in local stdio mode.',
-            'VALIDATION_ERROR',
-            'Use a local stdio server to download a Drive file to the local filesystem.'
-          )
-        }
-        throw new WorkspaceMCPError(
-          `Action not available in this transport: ${action}`,
-          'VALIDATION_ERROR',
-          'Use an action listed in the tool schema.'
-        )
-      }
       // A local-only parameter names a path on the server's disk (Gmail draft
       // attachments are read from it), so a remote call carrying one is
       // refused even when its action is otherwise available.

@@ -175,11 +175,11 @@ One composite tool per Workspace domain, plus `config` and `help`:
 | Tool | What it covers |
 | --- | --- |
 | `docs` | Google Docs -- `getText`, `create`, `writeText`, `getSuggestions`, `replaceText`, `formatText` |
-| `drive` | Files and folders -- `search`, `findFolder`, `createFolder`, `moveFile`, `renameFile`, `trashFile`, `downloadFile` (stdio only), `getComments` |
+| `drive` | Files and folders -- `search`, `findFolder`, `createFolder`, `moveFile`, `renameFile`, `trashFile`, `downloadFile`, `getComments` |
 | `calendar` | Events -- `listCalendars`, `listEvents`, `getEvent`, `createEvent`, `updateEvent`, `deleteEvent`, `respondToEvent`, `findFreeTime` |
-| `gmail` | Mail -- `search`, `get`, `send`, `createDraft`, `sendDraft`, `modify`, `batchModify`, `modifyThread`, `downloadAttachment` (stdio only), `listLabels`, `createLabel` |
-| `sheets` | Spreadsheets, read-only -- `getText`, `getRange`, `getMetadata` |
-| `slides` | Presentations -- 19 actions covering slides, text, shapes, images, tables, and speaker notes; `getImages` and `getSlideThumbnail` are stdio only |
+| `gmail` | Mail -- `search`, `get`, `send`, `createDraft`, `sendDraft`, `modify`, `batchModify`, `modifyThread`, `downloadAttachment`, `listLabels`, `createLabel` |
+| `sheets` | Spreadsheets -- `getText`, `getRange`, `getMetadata`, `create`, `updateRange`, `appendRows`, `clearRange`, `addSheet` |
+| `slides` | Presentations -- 19 actions covering slides, text, shapes, images, tables, speaker notes, and inline/local images & thumbnails |
 | `tasks` | Task lists and tasks -- `listTaskLists`, `listTasks`, `createTask`, `updateTask`, `completeTask`, `deleteTask` |
 | `chat` | Google Chat -- `listSpaces`, `findSpaceByName`, `setUpSpace`, `getMessages`, `listThreads`, `sendMessage`, `sendDm`, `findDmByEmail` |
 | `people` | Profile lookups -- `getMe`, `getUserProfile`, `getUserRelations` |
@@ -192,9 +192,10 @@ Questions are added to a form with `forms(action="batchUpdate")`, not at `create
 responses are read-only, because the Forms API cannot write one. Listing or
 deleting forms goes through `drive`.
 
-The actions marked stdio only write to the server's disk (and Gmail draft
-`attachments` read from it), so the HTTP transport leaves them out of the
-schema and the tool description and refuses a call that sends them anyway.
+Over HTTP transport, filesystem parameters (`localPath` and Gmail draft `attachments`)
+are omitted from the schema and refused if supplied; download actions (`drive.downloadFile`,
+`gmail.downloadAttachment`, `slides.getImages`, `slides.getSlideThumbnail`) return
+base64 payloads inline bounded by `WORKSPACE_MAX_INLINE_BYTES` (default 25 MB).
 
 ### Response size
 

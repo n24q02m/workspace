@@ -20,14 +20,16 @@
   integer 1–100000; defaults to 20000.
 - full (search, getComments, findFolder): `true` returns the complete payload and
   ignores `max_chars` and the item bound.
-- localPath (downloadFile): destination file inside the server install
-  directory; a relative path resolves against that directory. Links on the
-  path are followed: a destination whose real location is outside that
+- localPath (downloadFile, stdio only): destination file inside the server
+  install directory; a relative path resolves against that directory. Links on
+  the path are followed: a destination whose real location is outside that
   directory, or that goes through a link to a missing target, is refused.
+- returnBase64 (downloadFile): set `true` (or omit `localPath`) to return
+  base64-encoded content inline as `{fileId, name, mimeType, sizeBytes, encoding, data}`,
+  bounded by `WORKSPACE_MAX_INLINE_BYTES` (default 25 MB).
 
-downloadFile writes to the server's disk, so it is available only over local
-stdio transport. A remote client does not see it in the schema, and a call
-that sends it anyway is refused.
+Over HTTP transport, `localPath` is rejected; `downloadFile` omits `localPath`
+and returns inline base64 bytes bounded by `WORKSPACE_MAX_INLINE_BYTES`.
 
 ## Bounds
 
