@@ -315,4 +315,50 @@ describe('runCli', () => {
       logSpy.mockRestore()
     }
   })
+
+  it('applies --profile <name> and --profile=<name> before calling the CLI and strips the flag', async () => {
+    const cliSpy = vi.fn().mockResolvedValue(0)
+    vi.mocked(buildCli).mockReturnValue(cliSpy)
+    const originalProfile = process.env.WORKSPACE_PROFILE
+    const originalExitCode = process.exitCode
+    try {
+      delete process.env.WORKSPACE_PROFILE
+      await runCli(['--profile', 'work', 'status'])
+      expect(process.env.WORKSPACE_PROFILE).toBe('work')
+      expect(cliSpy).toHaveBeenCalledWith(['status'])
+      expect(process.exitCode).toBe(0)
+
+      delete process.env.WORKSPACE_PROFILE
+      await runCli(['gmail', 'list', '--profile=personal'])
+      expect(process.env.WORKSPACE_PROFILE).toBe('personal')
+      expect(cliSpy).toHaveBeenCalledWith(['gmail', 'list'])
+    } finally {
+      if (originalProfile === undefined) delete process.env.WORKSPACE_PROFILE
+      else process.env.WORKSPACE_PROFILE = originalProfile
+      process.exitCode = originalExitCode
+    }
+  })
+
+  it('exits 2 when --profile has a missing or invalid value', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const buildCallsBefore = vi.mocked(buildCli).mock.calls.length
+    const originalProfile = process.env.WORKSPACE_PROFILE
+    const originalExitCode = process.exitCode
+    try {
+      await runCli(['--profile'])
+      expect(process.exitCode).toBe(2)
+      expect(vi.mocked(buildCli).mock.calls.length).toBe(buildCallsBefore)
+
+      process.exitCode = undefined
+      await runCli(['--profile=bad/name'])
+      expect(process.exitCode).toBe(2)
+      expect(vi.mocked(buildCli).mock.calls.length).toBe(buildCallsBefore)
+      expect(errSpy).toHaveBeenCalled()
+    } finally {
+      if (originalProfile === undefined) delete process.env.WORKSPACE_PROFILE
+      else process.env.WORKSPACE_PROFILE = originalProfile
+      process.exitCode = originalExitCode
+      errSpy.mockRestore()
+    }
+  })
 })
