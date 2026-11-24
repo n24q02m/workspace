@@ -29,11 +29,14 @@
   maximum characters returned, integer 1–100000; defaults to 20000.
 - full (getText, getMetadata, getImages, getSpeakerNotes):
   `true` returns the complete payload and ignores `max_chars` and the item bounds.
-- localPath (getImages, getSlideThumbnail): absolute local directory that
-  receives every image (getImages), or absolute local file path of the
+- localPath (getImages, getSlideThumbnail, stdio only): absolute local directory
+  that receives every image (getImages), or absolute local file path of the
   thumbnail (getSlideThumbnail).
-  Both actions write to the server's disk, so they are available only over
-  local stdio transport.
+- returnBase64 (getImages, getSlideThumbnail): set `true` (or omit `localPath`) to
+  return inline base64 PNG payloads bounded by `WORKSPACE_MAX_INLINE_BYTES` (default 25 MB).
+
+Over HTTP transport, `localPath` is rejected; `getImages` and `getSlideThumbnail`
+omit `localPath` and return inline base64 payloads bounded by `WORKSPACE_MAX_INLINE_BYTES`.
 
 ## Bounds
 
@@ -44,9 +47,9 @@ bounded by default:
 | --- | --- | --- |
 | `getText` | 20,000 characters | raise `max_chars` (up to 100000), or `full: true` |
 | `getMetadata` | 20,000 characters, 100 `slides` entries | `full: true` |
-| `getImages` | 20,000 characters, 100 images | `full: true` |
+| `getImages` | 20,000 characters, 100 images (or `WORKSPACE_MAX_INLINE_BYTES` inline) | `full: true` |
 | `getSpeakerNotes` | 20,000 characters, 100 slides | `full: true` |
-| `getSlideThumbnail` | none -- writes the PNG to `localPath` and returns its URL, size and saved path | -- |
+| `getSlideThumbnail` | none (disk write or `WORKSPACE_MAX_INLINE_BYTES` inline) | -- |
 
 Truncation is never silent. A cut payload carries
 `_truncation: {truncated, total_characters, returned_characters, omitted_items?, note}`

@@ -4,12 +4,22 @@
 - getText
 - getRange
 - getMetadata
+- create
+- updateRange
+- appendRows
+- clearRange
+- addSheet
 
 ## Parameters
 
 - account (optional): email of the Google account to use; defaults to the primary account.
-- spreadsheetId: spreadsheet ID or URL (all actions).
-- range: A1 range for getRange, e.g. `Sheet1!A1:D20`.
+- spreadsheetId: spreadsheet ID or URL (all actions except `create`).
+- range: A1 range for `getRange`, `updateRange`, `appendRows`, and `clearRange`, e.g. `Sheet1!A1:D20`.
+- title: spreadsheet title (`create`) or new tab title (`addSheet`).
+- sheetTitles (create, optional): array of initial sheet tab names.
+- values (updateRange, appendRows): 2D array of rows to write or append.
+- valueInputOption (updateRange, appendRows, optional): `RAW` or `USER_ENTERED` (default `USER_ENTERED`).
+- insertDataOption (appendRows, optional): `OVERWRITE` or `INSERT_ROWS` (default `INSERT_ROWS`).
 - format (getText): `text` (default), `csv`, or `json`.
 - max_chars (getText, getRange): maximum characters returned, integer 1–100000; defaults to 20000.
 - full (getText, getRange): `true` returns the complete payload and ignores `max_chars`.

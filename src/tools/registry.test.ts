@@ -249,7 +249,7 @@ describe('registerTools', () => {
       const result = await getHandler(remoteServer, 'tools/list')({ method: 'tools/list' })
       const byName = Object.fromEntries(result.tools.map((tool: any) => [tool.name, tool]))
 
-      const checked = DOMAINS.filter((domain) => domain.localOnlyActions || domain.localOnlyInputProps)
+      const checked = DOMAINS.filter((domain) => domain.localOnlyInputProps)
       expect(checked.map((domain) => domain.name).sort()).toEqual(['drive', 'gmail', 'slides'])
       for (const domain of checked) {
         const tool = byName[domain.name]
@@ -260,7 +260,7 @@ describe('registerTools', () => {
             schema.description ?? ''
           ])
         ]
-        for (const word of [...(domain.localOnlyActions ?? []), ...(domain.localOnlyInputProps ?? [])]) {
+        for (const word of domain.localOnlyInputProps ?? []) {
           for (const [where, text] of texts) {
             expect(text, `${domain.name} ${where} names ${word}`).not.toContain(word)
           }
@@ -277,28 +277,22 @@ describe('registerTools', () => {
       expect(byName.slides.description).toContain('getSlideThumbnail')
     })
 
-    it('does not advertise Drive filesystem writes to remote clients', async () => {
-      const remoteServer = createServer()
-      registerTools(remoteServer, { allowLocalFilesystem: false })
-
-      const result = await getHandler(remoteServer, 'tools/list')({ method: 'tools/list' })
-      const driveTool = result.tools.find((tool: any) => tool.name === 'drive')
-
-      expect(driveTool.inputSchema.properties.action.enum).not.toContain('downloadFile')
-    })
-
-    it('does not advertise Gmail or Slides filesystem writes to remote clients', async () => {
+    it('advertises download actions over HTTP while hiding local filesystem params', async () => {
       const remoteServer = createServer()
       registerTools(remoteServer, { allowLocalFilesystem: false })
 
       const result = await getHandler(remoteServer, 'tools/list')({ method: 'tools/list' })
       const byName = Object.fromEntries(result.tools.map((tool: any) => [tool.name, tool]))
 
-      expect(byName.gmail.inputSchema.properties.action.enum).not.toContain('downloadAttachment')
-      expect(byName.slides.inputSchema.properties.action.enum).not.toContain('getImages')
-      expect(byName.slides.inputSchema.properties.action.enum).not.toContain('getSlideThumbnail')
+      expect(byName.drive.inputSchema.properties.action.enum).toContain('downloadFile')
+      expect(byName.drive.inputSchema.properties).not.toHaveProperty('localPath')
+      expect(byName.drive.inputSchema.properties).toHaveProperty('returnBase64')
+      expect(byName.gmail.inputSchema.properties.action.enum).toContain('downloadAttachment')
+      expect(byName.gmail.inputSchema.properties).toHaveProperty('attachmentId')
       expect(byName.gmail.inputSchema.properties).not.toHaveProperty('localPath')
       expect(byName.gmail.inputSchema.properties).not.toHaveProperty('attachments')
+      expect(byName.slides.inputSchema.properties.action.enum).toContain('getImages')
+      expect(byName.slides.inputSchema.properties.action.enum).toContain('getSlideThumbnail')
       expect(byName.slides.inputSchema.properties).not.toHaveProperty('localPath')
     })
 
@@ -457,42 +451,43 @@ describe('registerTools', () => {
       expect(result.content[0].text).toContain('Valid actions')
     })
 
-    it('rejects a raw remote downloadFile request before it reaches DriveService', async () => {
-      const remoteServer = createServer()
-      registerTools(remoteServer, { allowLocalFilesystem: false })
-      const handler = getHandler(remoteServer, 'tools/call')
-
-      const result = await handler({
-        method: 'tools/call',
-        params: {
-          name: 'drive',
-          arguments: { action: 'downloadFile', fileId: 'file-id', localPath: '../../outside.txt' }
-        }
-      })
-
-      expect(result.isError).toBe(true)
-      expect(result.content[0].text).toContain('downloadFile is only available in local stdio mode')
-      expect(drive).not.toHaveBeenCalled()
-    })
-
     it.each([
+      ['drive', 'downloadFile', { fileId: 'file-id', localPath: '../../outside.txt' }],
       ['gmail', 'downloadAttachment', { messageId: 'm-1', attachmentId: 'a-1', localPath: '/srv/out.bin' }],
       ['slides', 'getImages', { presentationId: 'p-1', localPath: '/srv/images' }],
       ['slides', 'getSlideThumbnail', { presentationId: 'p-1', slideObjectId: 's-1', localPath: '/srv/thumb.png' }]
-    ])('rejects a raw remote %s %s request before it reaches the service', async (name, action, args) => {
+    ])(
+      'rejects a raw remote %s %s request with localPath before it reaches the service',
+      async (name, action, args) => {
+        const remoteServer = createServer()
+        registerTools(remoteServer, { allowLocalFilesystem: false })
+        const handler = getHandler(remoteServer, 'tools/call')
+
+        const result = await handler({
+          method: 'tools/call',
+          params: { name, arguments: { action, ...args } }
+        })
+
+        expect(result.isError).toBe(true)
+        expect(result.content[0].text).toContain('Parameter not available in this transport: localPath')
+        expect(drive).not.toHaveBeenCalled()
+        expect(gmail).not.toHaveBeenCalled()
+        expect(slides).not.toHaveBeenCalled()
+      }
+    )
+
+    it('forwards remote download calls without localPath to the domain handler', async () => {
       const remoteServer = createServer()
       registerTools(remoteServer, { allowLocalFilesystem: false })
       const handler = getHandler(remoteServer, 'tools/call')
 
       const result = await handler({
         method: 'tools/call',
-        params: { name, arguments: { action, ...args } }
+        params: { name: 'drive', arguments: { action: 'downloadFile', fileId: 'file-id' } }
       })
 
-      expect(result.isError).toBe(true)
-      expect(result.content[0].text).toContain(`Action not available in this transport: ${action}`)
-      expect(gmail).not.toHaveBeenCalled()
-      expect(slides).not.toHaveBeenCalled()
+      expect(result.isError).toBeUndefined()
+      expect(drive).toHaveBeenCalledWith({ action: 'downloadFile', fileId: 'file-id' })
     })
 
     // createDraft reads each attachments[].filePath from the server's disk and
@@ -526,7 +521,7 @@ describe('registerTools', () => {
     // value on an action that is available remotely is refused as well.
     it.each([
       ['gmail', { action: 'get', messageId: 'm-1', localPath: null }, 'localPath'],
-      ['gmail', { action: 'get', messageId: 'm-1', attachmentId: 'a-1' }, 'attachmentId'],
+      ['gmail', { action: 'get', messageId: 'm-1', attachments: [{ filePath: '/srv/a' }] }, 'attachments'],
       ['slides', { action: 'getText', presentationId: 'p-1', localPath: '/srv/out' }, 'localPath']
     ])('refuses a remote %s call that carries a local-only parameter (%o)', async (name, args, prop) => {
       const remoteServer = createServer()

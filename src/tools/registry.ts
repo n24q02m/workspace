@@ -49,11 +49,6 @@ const AVAILABLE_RESOURCE_URIS = RESOURCES.map((r) => r.uri).join(', ')
  * comes from `actions`, extra params from `inputProps`, and `account` is
  * appended for every domain (selects which Google account the call acts as).
  */
-function availableActions(domain: DomainDef, allowLocalFilesystem: boolean): readonly string[] {
-  if (allowLocalFilesystem || !domain.localOnlyActions) return domain.actions
-  return domain.actions.filter((action) => !domain.localOnlyActions!.includes(action))
-}
-
 function availableInputProps(domain: DomainDef, allowLocalFilesystem: boolean): Record<string, unknown> {
   if (allowLocalFilesystem || !domain.localOnlyInputProps) return domain.inputProps
   return Object.fromEntries(
@@ -68,7 +63,6 @@ export function domainDescription(domain: DomainDef, allowLocalFilesystem: boole
 }
 
 function domainToolDef(domain: DomainDef, allowLocalFilesystem: boolean) {
-  const actions = availableActions(domain, allowLocalFilesystem)
   return {
     name: domain.name,
     description: domainDescription(domain, allowLocalFilesystem),
@@ -82,7 +76,7 @@ function domainToolDef(domain: DomainDef, allowLocalFilesystem: boolean) {
     inputSchema: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: [...actions], description: 'Action to perform' },
+        action: { type: 'string', enum: [...domain.actions], description: 'Action to perform' },
         account: {
           type: 'string',
           description: 'Google account email to act as. Defaults to the primary account (config action="account_list").'

@@ -23,15 +23,16 @@
 - maxResults (search): messages per page, default 20, clamped to 1–100.
 - pageToken (search): continuation token from a previous `search` page.
 - format (get): `minimal`, `full` (default), `raw`, or `metadata`.
-- localPath (downloadAttachment): absolute local file path to save the
-  attachment to.
-- attachments (createDraft): local files to attach, each
+- localPath (downloadAttachment, stdio only): absolute local file path to save
+  the attachment to.
+- returnBase64 (downloadAttachment): set `true` (or omit `localPath`) to return
+  base64-encoded attachment bytes inline as `{messageId, attachmentId, sizeBytes, encoding, data}`,
+  bounded by `WORKSPACE_MAX_INLINE_BYTES` (default 25 MB).
+- attachments (createDraft, stdio only): local files to attach, each
   `{filePath, filename?, mimeType?}` with an absolute `filePath`.
 
-downloadAttachment writes to the server's disk and createDraft attachments are
-read from it, so both are available only over local stdio transport. A remote
-client does not see them in the schema, and a call that sends them anyway is
-refused.
+Over HTTP transport, `localPath` and `attachments` are rejected; `downloadAttachment`
+omits `localPath` and returns inline base64 bytes bounded by `WORKSPACE_MAX_INLINE_BYTES`.
 
 ## Bounds
 
