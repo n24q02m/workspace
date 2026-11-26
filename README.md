@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://docs.n24q02m.com/servers/workspace/">Docs</a> ·
+  <a href="https://docs.n24q02m.com/plugins/servers/workspace/">Docs</a> ·
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="https://github.com/n24q02m/workspace/discussions">Community</a>
@@ -33,7 +33,6 @@
 | [email](https://github.com/n24q02m/email)                                     | IMAP/SMTP email for AI agents -- read, send, organize folders, and manage att... | MCP         |
 | [fastretrieval](https://github.com/n24q02m/fastretrieval)                     | Fast multi-model retrieval runtime: ONNX and GGUF embeddings, reranking, and ... | Tooling     |
 | [hull](https://github.com/n24q02m/hull)                                       | hull is the shared monorepo core for the wet, crg and mnemo self-hosted stack    | MCP         |
-| [jules-task-archiver](https://github.com/n24q02m/jules-task-archiver)         | Chrome Extension for bulk operations on Jules tasks via batchexecute API -- a... | Tooling     |
 | [mnemo](https://github.com/n24q02m/mnemo)                                     | Persistent AI memory with hybrid search. Open, free, unlimited.                  | MCP         |
 | [notion](https://github.com/n24q02m/notion)                                   | Markdown-first Notion for AI agents -- pages, databases, blocks, and comments... | MCP         |
 | [skret](https://github.com/n24q02m/skret)                                     | Secrets without the server.                                                      | CLI         |
@@ -399,9 +398,9 @@ replaced in place, so nothing else changes.
 
 ## Documentation
 
-Full docs at **[docs.n24q02m.com/servers/workspace/](https://docs.n24q02m.com/servers/workspace/)**:
+Full docs at **[docs.n24q02m.com/plugins/servers/workspace/](https://docs.n24q02m.com/plugins/servers/workspace/)**:
 
-- [Setup](https://docs.n24q02m.com/servers/workspace/setup/) -- plugin install, Docker stdio, and Docker HTTP methods
+- [Setup](https://docs.n24q02m.com/plugins/servers/workspace/setup/) -- plugin install, Docker stdio, and Docker HTTP methods
 
 Every tool also documents itself at runtime: call `help` for the full reference on
 any of them, including the exact parameters each action takes.
