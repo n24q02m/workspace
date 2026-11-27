@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it } from 'vitest'
 import { registerTools } from '../src/tools/registry.js'
 
@@ -17,20 +16,19 @@ const expected = JSON.parse(readFileSync(join(here, 'fixtures', 'tools_expected.
 
 describe('tool surface parity', () => {
   it('registers exactly the fixture tools with identical names, descriptions and schemas', async () => {
-    // registerTools only needs setRequestHandler; capture the tools/list handler directly.
-    const handlers = new Map<unknown, (request: unknown) => Promise<unknown>>()
-    const fakeServer = {
-      setRequestHandler: (schema: unknown, handler: (request: unknown) => Promise<unknown>) => {
-        handlers.set(schema, handler)
-      }
-    } as unknown as Server
-    registerTools(fakeServer)
+    const server = new McpServer({ name: 'test-server', version: '0.0.0' }, { capabilities: { resources: {} } })
+    registerTools(server)
 
-    const listTools = handlers.get(ListToolsRequestSchema)
+    const handlers = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, (request: unknown, ctx: unknown) => Promise<unknown>>
+      }
+    )._requestHandlers
+    const listTools = handlers.get('tools/list')
     if (!listTools) {
       throw new Error('registerTools did not register a tools/list handler')
     }
-    const actual = (await listTools({ method: 'tools/list' })) as { tools: unknown[] }
+    const actual = (await listTools({ method: 'tools/list' }, {})) as { tools: unknown[] }
 
     expect(actual.tools).toEqual(expected.tools)
   })

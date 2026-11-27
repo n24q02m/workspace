@@ -4,7 +4,7 @@
  * same way -- this factory captures that dispatch once instead of each
  * domain hand-rolling it (see docs.ts before this refactor).
  */
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { runWithAccount } from '../../auth/account-context.js'
 import { BASE_SCOPES } from '../../constants.js'
 import { AuthManager } from '../../vendored/auth/AuthManager.js'

@@ -1,19 +1,21 @@
 /**
- * HTTP transport: Streamable HTTP `/mcp` served by hull, with a per-user bearer table.
+ * HTTP transport: Streamable HTTP `/mcp` serving MCP 2026-07-28 (with stateless
+ * 2025-11-25 compatibility) and hull's per-user bearer-token authentication.
  *
- * Auth is hull's `multi` mode: every request carries `Authorization: Bearer <token>`,
- * hull maps the token to a user row in the users file, and that row's `namespace` is
- * the credential bucket for the request (see subject-context.ts). Google consent is
- * NOT served over HTTP; it runs from the CLI `auth` command on the host
- * (src/auth/cli-auth.ts), which wraps add-account.ts.
- *
- * Session-based (one Server per MCP session), because the SDK stateless mode is not
- * used by hull.
+ * Auth is hull's `multi` mode: every `/mcp` request carries
+ * `Authorization: Bearer <token>`, hull maps the token to a user row in the
+ * users file, and that row's `namespace` is the credential bucket for the
+ * request via `AsyncLocalStorage` (`currentUser()` in subject-context.ts).
+ * Google consent is NOT served over HTTP; it runs from the CLI `auth` command
+ * on the host (`src/auth/cli-auth.ts`).
  */
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { runHttpServer } from '@n24q02m/hull/transport'
+import { createServer } from 'node:http'
+import { toNodeHandler } from '@modelcontextprotocol/node'
+import { createMcpHandler, McpServer } from '@modelcontextprotocol/server'
+import { Authenticator, guardRequest } from '@n24q02m/hull/token-auth'
+import { jsonResponse } from '@n24q02m/hull/transport'
 import { SERVER_NAME } from '../constants.js'
+import { loadWorkspaceSkillsCatalog, type WorkspaceSkillCatalog } from '../skills.js'
 import { registerTools } from '../tools/registry.js'
 import { getPackageVersion } from '../version.js'
 
@@ -22,6 +24,100 @@ import { getPackageVersion } from '../version.js'
  * Mint tokens and rows with the CLI `token` command; the file never holds raw tokens.
  */
 export const USERS_FILE_ENV = 'WORKSPACE_USERS_FILE'
+
+export interface WorkspaceHttpOptions {
+  port?: number
+  host?: string
+  usersFile?: string
+  skillsCatalog?: WorkspaceSkillCatalog
+}
+
+export interface WorkspaceHttpHandle {
+  host: string
+  port: number
+  close: () => Promise<void>
+}
+
+/**
+ * Create and start the authenticated Streamable HTTP server for Better Workspace MCP.
+ * Serves `2026-07-28` (`server/discover`, MRTR elicitation, `io.modelcontextprotocol/skills`,
+ * `io.modelcontextprotocol/files`) alongside stateless `2025-11-25` fallback on `/mcp`,
+ * plus `/health`.
+ */
+export async function createWorkspaceHttpServer(options: WorkspaceHttpOptions = {}): Promise<WorkspaceHttpHandle> {
+  const host = options.host ?? '127.0.0.1'
+  const wantedPort = options.port ?? 0
+  const authenticator = new Authenticator({ mode: 'multi', usersFile: options.usersFile })
+  const skillsCatalog = options.skillsCatalog ?? (await loadWorkspaceSkillsCatalog())
+
+  const mcpHandler = createMcpHandler(
+    () => {
+      const server = new McpServer(
+        { name: SERVER_NAME, version: getPackageVersion() },
+        { capabilities: { resources: {} } }
+      )
+      skillsCatalog.attach(server)
+      registerTools(server, { allowLocalFilesystem: false })
+      return server
+    },
+    {
+      onerror: (error) => {
+        console.error(`[${SERVER_NAME}] http error:`, error.message)
+      }
+    }
+  )
+
+  const nodeMcpHandler = toNodeHandler(mcpHandler, {
+    onerror: (error) => {
+      console.error(`[${SERVER_NAME}] http handler error:`, error.message)
+    }
+  })
+
+  const dispatch = async (req: Parameters<typeof nodeMcpHandler>[0], res: Parameters<typeof nodeMcpHandler>[1]) => {
+    const rawReq = req as import('node:http').IncomingMessage
+    const rawRes = res as import('node:http').ServerResponse
+    const url = new URL(rawReq.url ?? '/', `http://${rawReq.headers.host ?? 'localhost'}`)
+    if (url.pathname === '/health') {
+      jsonResponse(rawRes, 200, { status: 'ok', server: SERVER_NAME })
+      return
+    }
+    if (url.pathname === '/mcp') {
+      await guardRequest(authenticator, rawReq, rawRes, () => nodeMcpHandler(rawReq, rawRes))
+      return
+    }
+    jsonResponse(rawRes, 404, { error: 'not_found' })
+  }
+
+  const httpServer = createServer((req, res) => {
+    dispatch(req, res).catch(() => {
+      if (!res.headersSent) {
+        jsonResponse(res, 500, { error: 'internal_error' })
+      }
+    })
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    httpServer.once('error', reject)
+    httpServer.listen(wantedPort, host, () => {
+      httpServer.removeListener('error', reject)
+      resolve()
+    })
+  })
+
+  const addr = httpServer.address()
+  const actualPort = typeof addr === 'object' && addr ? addr.port : wantedPort
+
+  return {
+    host,
+    port: actualPort,
+    close: async () => {
+      await mcpHandler.close().catch(() => undefined)
+      await new Promise<void>((resolve, reject) => {
+        httpServer.close((err) => (err ? reject(err) : resolve()))
+      })
+    }
+  }
+}
 
 export async function startHttp(): Promise<void> {
   // Per-user credential stores (PerPluginStore with a subject) derive their encryption key
@@ -35,32 +131,25 @@ export async function startHttp(): Promise<void> {
 
   const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 0
   const host = process.env.HOST
+  const usersFile = process.env[USERS_FILE_ENV] || undefined
+  const skillsCatalog = await loadWorkspaceSkillsCatalog()
 
-  const handle = await runHttpServer(
-    () => {
-      // One Server per MCP session. hull types the factory as McpServer but only calls
-      // `.connect(transport)`, which the low-level Server also implements.
-      const server = new Server(
-        { name: SERVER_NAME, version: getPackageVersion() },
-        { capabilities: { tools: {}, resources: {} } }
-      )
-      registerTools(server, { allowLocalFilesystem: false })
-      return server as unknown as McpServer
-    },
-    {
-      serverName: SERVER_NAME,
-      port,
-      host,
-      auth: { mode: 'multi', usersFile: process.env[USERS_FILE_ENV] || undefined }
-    }
-  )
+  const handle = await createWorkspaceHttpServer({
+    port,
+    host,
+    usersFile,
+    skillsCatalog
+  })
 
   console.error(`[${SERVER_NAME}] http mode on http://${handle.host}:${handle.port}/mcp`)
 
   // The listening socket keeps the loop alive; this wait lets SIGINT/SIGTERM reach
-  // handle.close() (closes the transport and removes the lock file) instead of cutting it.
+  // handle.close() cleanly instead of leaving connections mid-flight.
   await new Promise<void>((resolve) => {
+    let closed = false
     const shutdown = async (): Promise<void> => {
+      if (closed) return
+      closed = true
       await handle.close()
       resolve()
     }

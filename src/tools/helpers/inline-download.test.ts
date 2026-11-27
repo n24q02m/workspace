@@ -1,4 +1,4 @@
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
@@ -11,7 +11,10 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('../../auth/credential-state.js', () => ({
-  getAuth: () => ({ getAuthenticatedClient: h.getAuthenticatedClient }),
+  getAuth: () => ({
+    getAuthenticatedClient: h.getAuthenticatedClient,
+    listAccounts: vi.fn(async () => ({ accounts: ['seed@example.com'], primary: 'seed@example.com' }))
+  }),
   getState: () => 'configured',
   resolveCredentialState: vi.fn(async () => 'configured')
 }))
@@ -33,11 +36,13 @@ vi.mock('gaxios', () => ({
   request: h.gaxiosRequest
 }))
 
+import { FILES_EXTENSION_ID } from '@n24q02m/hull/extensions'
 import { dispatchTool } from '../dispatch.js'
 import { drive } from '../domains/drive.js'
 import { gmail } from '../domains/gmail.js'
 import { slides } from '../domains/slides.js'
 import { MAX_INLINE_BYTES_ENV, resolveMaxInlineBytes } from './inline-download.js'
+import { runWithMcpContext } from './mcp-context.js'
 
 const parse = (res: CallToolResult) => JSON.parse((res.content[0] as { text?: string }).text ?? '{}')
 const toArrayBuffer = (b: Buffer) => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)
@@ -212,5 +217,44 @@ describe('inline base64 downloads (GAP-WORKSPACE-5)', () => {
     expect((blocked.content[0] as { text?: string }).text).toContain(
       'Parameter not available in this transport: localPath'
     )
+  })
+
+  it('attaches io.modelcontextprotocol/files payloads when client declares files capability', async () => {
+    const fileBytes = Buffer.from('drive-file-content')
+    h.driveFilesGet
+      .mockResolvedValueOnce({ data: { id: 'f1', name: 'report.txt', mimeType: 'text/plain' } })
+      .mockResolvedValueOnce({ data: toArrayBuffer(fileBytes) })
+
+    const driveRes = await runWithMcpContext({ clientCapabilities: { extensions: { [FILES_EXTENSION_ID]: {} } } }, () =>
+      drive({ action: 'downloadFile', fileId: 'f1' })
+    )
+    expect(driveRes._meta?.[FILES_EXTENSION_ID]).toMatchObject({
+      extension: FILES_EXTENSION_ID,
+      name: 'report.txt',
+      mimeType: 'text/plain',
+      uri: 'workspace://drive/f1'
+    })
+    expect(driveRes.structuredContent).toHaveProperty('file')
+
+    const imgBytes = Buffer.from('slide-img')
+    h.slidesGet.mockResolvedValueOnce({
+      data: {
+        slides: [
+          {
+            objectId: 's1',
+            pageElements: [{ objectId: 'e1', image: { contentUrl: 'https://img/e1' } }]
+          }
+        ]
+      }
+    })
+    h.gaxiosRequest.mockResolvedValueOnce({ data: toArrayBuffer(imgBytes), headers: { 'content-type': 'image/png' } })
+
+    const slidesRes = await runWithMcpContext(
+      { clientCapabilities: { extensions: { [FILES_EXTENSION_ID]: {} } } },
+      () => slides({ action: 'getImages', presentationId: 'deck-1' })
+    )
+    expect(Array.isArray(slidesRes._meta?.[FILES_EXTENSION_ID])).toBe(true)
+    expect(slidesRes._meta?.[FILES_EXTENSION_ID]).toHaveLength(1)
+    expect(slidesRes.structuredContent).toHaveProperty('files')
   })
 })

@@ -1,4 +1,5 @@
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
+import { buildFilePayload, FILES_EXTENSION_ID, type FilePayload } from '@n24q02m/hull/extensions'
 import { request } from 'gaxios'
 import { google } from 'googleapis'
 import { currentAccount, runWithAccount } from '../../auth/account-context.js'
@@ -7,6 +8,7 @@ import { gaxiosOptions } from '../../vendored/utils/GaxiosConfig.js'
 import { extractDocId } from '../../vendored/utils/IdUtils.js'
 import { logToFile } from '../../vendored/utils/logger.js'
 import { extractDocumentId } from '../../vendored/utils/validation.js'
+import { clientSupportsFilesExtension } from './mcp-context.js'
 
 /** Default inline binary size cap (25 MB) when returning base64 over HTTP/stdio without localPath. */
 export const DEFAULT_MAX_INLINE_BYTES = 25 * 1024 * 1024
@@ -52,6 +54,25 @@ function jsonTextResult(payload: unknown, isError = false): CallToolResult {
   }
   if (isError) result.isError = true
   return result
+}
+
+function jsonFileTransferResult(
+  payload: Record<string, unknown>,
+  filesPayload: FilePayload | FilePayload[] | undefined
+): CallToolResult {
+  if (filesPayload === undefined || !clientSupportsFilesExtension()) {
+    return jsonTextResult(payload)
+  }
+  const extendedPayload = Array.isArray(filesPayload)
+    ? { ...payload, files: filesPayload }
+    : { ...payload, file: filesPayload }
+  return {
+    content: [{ type: 'text', text: JSON.stringify(extendedPayload) }],
+    structuredContent: extendedPayload,
+    _meta: {
+      [FILES_EXTENSION_ID]: filesPayload
+    }
+  }
 }
 
 function errorTextResult(error: unknown): CallToolResult {
@@ -130,14 +151,20 @@ export async function downloadDriveFileInline(input: Record<string, unknown>): P
     const buffer = Buffer.from(media.data as ArrayBuffer)
     assertSizeLimit(buffer.byteLength, maxInlineBytes, `Drive file ${id}`)
 
-    return jsonTextResult({
-      fileId: meta.data.id ?? id,
+    const idValue = meta.data.id ?? id
+    const payload = {
+      fileId: idValue,
       name: meta.data.name,
       mimeType,
       sizeBytes: buffer.byteLength,
       encoding: 'base64',
       data: buffer.toString('base64')
+    }
+    const filePayload = buildFilePayload(buffer, meta.data.name ?? `${idValue}.bin`, {
+      mimeType,
+      uri: `workspace://drive/${idValue}`
     })
+    return jsonFileTransferResult(payload, filePayload)
   } catch (error) {
     return errorTextResult(error)
   }
@@ -171,13 +198,18 @@ export async function downloadGmailAttachmentInline(input: Record<string, unknow
     const buffer = Buffer.from(rawData, 'base64url')
     assertSizeLimit(buffer.byteLength, maxInlineBytes, `Attachment ${attachmentId}`)
 
-    return jsonTextResult({
+    const payload = {
       messageId,
       attachmentId,
       sizeBytes: buffer.byteLength,
       encoding: 'base64',
       data: buffer.toString('base64')
+    }
+    const filePayload = buildFilePayload(buffer, `${attachmentId}.bin`, {
+      mimeType: 'application/octet-stream',
+      uri: `workspace://gmail/${messageId}/attachments/${attachmentId}`
     })
+    return jsonFileTransferResult(payload, filePayload)
   } catch (error) {
     return errorTextResult(error)
   }
@@ -240,12 +272,24 @@ export async function downloadSlidesImagesInline(input: Record<string, unknown>)
       images.push(entry)
     }
 
-    return jsonTextResult({
-      presentationId: id,
-      encoding: 'base64',
-      totalBytes,
-      images
-    })
+    const filePayloads = images
+      .filter((img) => typeof img.data === 'string' && typeof img.mimeType === 'string')
+      .map((img) =>
+        buildFilePayload(Buffer.from(img.data as string, 'base64'), `${String(img.elementObjectId ?? 'image')}.bin`, {
+          mimeType: img.mimeType as string,
+          uri: `workspace://slides/${id}/elements/${String(img.elementObjectId ?? 'image')}`
+        })
+      )
+
+    return jsonFileTransferResult(
+      {
+        presentationId: id,
+        encoding: 'base64',
+        totalBytes,
+        images
+      },
+      filePayloads.length > 0 ? filePayloads : undefined
+    )
   } catch (error) {
     return errorTextResult(error)
   }
@@ -274,16 +318,22 @@ export async function downloadSlideThumbnailInline(input: Record<string, unknown
     })
 
     const result: Record<string, unknown> = { ...thumbnail.data }
+    let filePayload: FilePayload | undefined
     if (typeof result.contentUrl === 'string' && result.contentUrl.length > 0) {
       const { buffer, mimeType } = await fetchUrlBytes(result.contentUrl)
       assertSizeLimit(buffer.byteLength, maxInlineBytes, `Slide thumbnail ${slideObjectId}`)
-      result.mimeType = mimeType ?? 'image/png'
+      const resolvedMime = mimeType ?? 'image/png'
+      result.mimeType = resolvedMime
       result.sizeBytes = buffer.byteLength
       result.encoding = 'base64'
       result.data = buffer.toString('base64')
+      filePayload = buildFilePayload(buffer, `${slideObjectId}-thumbnail.png`, {
+        mimeType: resolvedMime,
+        uri: `workspace://slides/${id}/pages/${slideObjectId}/thumbnail`
+      })
     }
 
-    return jsonTextResult(result)
+    return jsonFileTransferResult(result, filePayload)
   } catch (error) {
     return errorTextResult(error)
   }

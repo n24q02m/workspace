@@ -11,14 +11,14 @@
  * TRANSPORT_MODE selects the transport:
  *   - "stdio" (default): Local mode. First run opens the Google consent flow on loopback,
  *     then the MCP SDK StdioServerTransport serves directly (no daemon proxy hop).
- *   - "http": Remote mode. hull `runHttpServer` with bearer-token auth (multi-user); each user
- *     has a credential namespace (src/transports/http.ts).
+ *   - "http": Remote mode. Streamable HTTP `/mcp` via createMcpHandler + hull bearer-token auth
+ *     (multi-user); each user has a credential namespace (src/transports/http.ts).
  */
 
 import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { McpServer } from '@modelcontextprotocol/server'
+import { StdioServerTransport, serveStdio } from '@modelcontextprotocol/server/stdio'
 import { buildCli } from '@n24q02m/hull'
 import { resolveProfile } from '@n24q02m/hull/storage'
 import { authCommand } from './auth/cli-auth.js'
@@ -27,6 +27,7 @@ import { runOAuthSetup } from './auth/oauth-setup.js'
 import { cliHelpText, toolCommands } from './cli/tools.js'
 import { SERVER_NAME, STORE_PLUGIN } from './constants.js'
 import { prepareDataDir } from './data-dir.js'
+import { loadWorkspaceSkillsCatalog } from './skills.js'
 import { registerTools } from './tools/registry.js'
 import { startHttp } from './transports/http.js'
 import { getPackageVersion } from './version.js'
@@ -89,14 +90,25 @@ export async function startServer(mode: string): Promise<void> {
     await resolveCredentialState() // -> 'configured'
   }
 
-  const server = new Server(
-    { name: SERVER_NAME, version: getPackageVersion() },
-    { capabilities: { tools: {}, resources: {} } }
-  )
-  registerTools(server) // NO client factory (single-account M1)
-
+  const skillsCatalog = await loadWorkspaceSkillsCatalog()
   const transport = new StdioServerTransport()
-  await server.connect(transport)
+  serveStdio(
+    () => {
+      const server = new McpServer(
+        { name: SERVER_NAME, version: getPackageVersion() },
+        { capabilities: { resources: {} } }
+      )
+      skillsCatalog.attach(server)
+      registerTools(server) // NO client factory (single-account M1)
+      return server
+    },
+    {
+      transport,
+      onerror: (error) => {
+        console.error(`[${SERVER_NAME}] stdio error:`, error.message)
+      }
+    }
+  )
   console.error(`[${SERVER_NAME}] stdio mode ready (v${getPackageVersion()})`)
 }
 

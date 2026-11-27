@@ -28,8 +28,10 @@ vi.mock('../../vendored/services/DocsService.js', () => ({
 // the account tests below assert against a stub and pass no matter how the
 // dispatch is wired. The real shim's constructor only stores `scopes`.
 
+import { FILES_EXTENSION_ID } from '@n24q02m/hull/extensions'
 import { runWithAccount } from '../../auth/account-context.js'
 import { getAuth } from '../../auth/credential-state.js'
+import { runWithMcpContext } from '../helpers/mcp-context.js'
 import { DOCS_ACTIONS, docs } from './docs.js'
 
 /** Records the account each getAuthenticatedClient() call resolves to. */
@@ -141,5 +143,42 @@ describe('docs mega-tool', () => {
     ])
 
     expect(seen.sort()).toEqual(['a@example.com', 'b@example.com', undefined])
+  })
+
+  it('attaches io.modelcontextprotocol/files payload on getText when client supports files extension', async () => {
+    const body = JSON.stringify({ title: 'Spec', tabs: [{ title: 'Tab 1', content: 'Hello' }] })
+    getTextMock.mockResolvedValueOnce({ content: [{ type: 'text', text: body }] })
+
+    const res = await runWithMcpContext({ clientCapabilities: { extensions: { [FILES_EXTENSION_ID]: {} } } }, () =>
+      docs({ action: 'getText', documentId: 'doc-123' })
+    )
+
+    expect(res._meta?.[FILES_EXTENSION_ID]).toMatchObject({
+      extension: FILES_EXTENSION_ID,
+      name: 'doc-123.json',
+      mimeType: 'application/json',
+      uri: 'workspace://docs-file/doc-123',
+      text: body
+    })
+    expect(res.structuredContent).toMatchObject({ documentId: 'doc-123' })
+
+    // Skips attaching when DocsService returns a JSON error or invalid JSON
+    getTextMock.mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ error: 'Not found' }) }] })
+    const errRes = await runWithMcpContext({ clientCapabilities: { extensions: { [FILES_EXTENSION_ID]: {} } } }, () =>
+      docs({ action: 'getText', documentId: 'doc-123' })
+    )
+    expect(errRes._meta).toBeUndefined()
+
+    getTextMock.mockResolvedValueOnce({ content: [{ type: 'text', text: 'plain single-tab body' }] })
+    const plainRes = await runWithMcpContext({ clientCapabilities: { extensions: { [FILES_EXTENSION_ID]: {} } } }, () =>
+      docs({ action: 'getText', documentId: 'doc-123' })
+    )
+    expect(plainRes._meta?.[FILES_EXTENSION_ID]).toMatchObject({
+      extension: FILES_EXTENSION_ID,
+      name: 'doc-123.txt',
+      mimeType: 'text/plain; charset=utf-8',
+      uri: 'workspace://docs-file/doc-123',
+      text: 'plain single-tab body'
+    })
   })
 })

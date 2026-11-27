@@ -8,8 +8,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it } from 'vitest'
 import { registerTools } from '../src/tools/registry.js'
 
@@ -21,17 +20,16 @@ interface ListedTool {
 }
 
 async function listedTools(): Promise<Map<string, ListedTool>> {
-  // registerTools only needs setRequestHandler; capture the tools/list handler directly.
-  const handlers = new Map<unknown, (request: unknown) => Promise<unknown>>()
-  const fakeServer = {
-    setRequestHandler: (schema: unknown, handler: (request: unknown) => Promise<unknown>) => {
-      handlers.set(schema, handler)
+  const server = new McpServer({ name: 'test-server', version: '0.0.0' }, { capabilities: { resources: {} } })
+  registerTools(server)
+  const handlers = (
+    server.server as unknown as {
+      _requestHandlers: Map<string, (request: unknown, ctx: unknown) => Promise<unknown>>
     }
-  } as unknown as Server
-  registerTools(fakeServer)
-  const listTools = handlers.get(ListToolsRequestSchema)
+  )._requestHandlers
+  const listTools = handlers.get('tools/list')
   if (!listTools) throw new Error('registerTools did not register a tools/list handler')
-  const { tools } = (await listTools({ method: 'tools/list' })) as { tools: ListedTool[] }
+  const { tools } = (await listTools({ method: 'tools/list' }, {})) as { tools: ListedTool[] }
   return new Map(tools.map((tool) => [tool.name, tool]))
 }
 

@@ -17,7 +17,7 @@
  *   caller can always page on instead of being stranded mid-list.
  */
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 
 /** Characters kept by default. Matches the sheets/docs/notion reads. */
 export const DEFAULT_RESPONSE_CHARS = 20_000

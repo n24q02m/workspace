@@ -42,7 +42,10 @@ vi.mock('./config.js', async () => {
 
 vi.mock('../auth/credential-state.js', () => ({
   getState: vi.fn(() => 'configured'),
-  resolveCredentialState: vi.fn(async () => 'awaiting_setup')
+  resolveCredentialState: vi.fn(async () => 'awaiting_setup'),
+  getAuth: vi.fn(() => ({
+    listAccounts: vi.fn(async () => ({ accounts: ['seed@example.com'], primary: 'seed@example.com' }))
+  }))
 }))
 
 // Mock node:path to allow simulating path traversal by controlling relative()
@@ -63,7 +66,7 @@ vi.mock('node:fs/promises', () => ({
 
 import { readFile } from 'node:fs/promises'
 import { relative, sep } from 'node:path'
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import { localAuthContext, runWithAuthContext } from '@n24q02m/hull/token-auth'
 import { getState } from '../auth/credential-state.js'
 import { config } from './config.js'
@@ -80,21 +83,26 @@ import { registerTools } from './registry.js'
 const EXPECTED_TOOL_NAMES = [...DOMAINS.map((d) => d.name), 'config', 'help']
 
 function createServer() {
-  return new Server({ name: 'test-server', version: '0.0.0' }, { capabilities: { tools: {}, resources: {} } })
+  return new McpServer({ name: 'test-server', version: '0.0.0' }, { capabilities: { resources: {} } })
 }
 
-// registerTools stores handlers in the SDK's private _requestHandlers map,
+// registerTools stores handlers in the low-level Server's private _requestHandlers map,
 // keyed by JSON-RPC method (e.g. 'tools/list'). There is no public accessor,
 // so tests reach in directly -- same trick notion's mock-server test double
-// uses, just against a real Server instance for schema-parsing coverage.
-function getHandler(server: Server, method: string) {
-  return (
-    server as unknown as { _requestHandlers: Map<string, (request: unknown) => Promise<any>> }
+// uses, just against a real McpServer instance for schema-parsing coverage.
+function getHandler(server: McpServer, method: string) {
+  const handler = (
+    server.server as unknown as { _requestHandlers: Map<string, (request: unknown, ctx: unknown) => Promise<any>> }
   )._requestHandlers.get(method)!
+  return (request: unknown, ctx?: unknown) =>
+    handler(
+      request,
+      ctx ?? { mcpReq: { requestState: () => undefined, inputResponses: undefined, envelope: undefined } }
+    )
 }
 
 describe('registerTools', () => {
-  let server: Server
+  let server: McpServer
 
   beforeEach(() => {
     vi.clearAllMocks()

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { setHomeDirForTesting } from '@n24q02m/hull/storage'
 import { localAuthContext, runWithAuthContext } from '@n24q02m/hull/token-auth'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
