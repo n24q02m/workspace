@@ -8,7 +8,7 @@ vi.mock('../tools/dispatch.js', () => ({
   HELP_TOPICS: ['docs', 'drive', 'config', 'overview']
 }))
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { buildCli } from '@n24q02m/hull'
 import { SERVER_NAME, STORE_PLUGIN } from '../constants.js'
 import type * as DispatchModule from '../tools/dispatch.js'

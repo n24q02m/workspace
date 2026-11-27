@@ -23,8 +23,8 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { Client } from '@modelcontextprotocol/client'
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import { PerPluginStore, setHomeDirForTesting } from '@n24q02m/hull/storage'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { STORE_PLUGIN } from '../../src/constants.js'
@@ -180,6 +180,7 @@ describe('M1 stdio protocol E2E', () => {
   })
 
   it('the server process is still alive and responsive after all prior calls (no unhandled crash)', async () => {
-    await expect(client.ping()).resolves.toBeDefined()
+    await expect(client.listTools()).resolves.toHaveProperty('tools')
+    expect(client.getNegotiatedProtocolVersion()).toBe('2025-11-25')
   })
 })

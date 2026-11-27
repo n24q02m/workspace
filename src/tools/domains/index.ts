@@ -6,7 +6,7 @@
  * arrays. Adding a domain = pushing one DomainDef here.
  */
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import type { FormsService } from '../../services/FormsService.js'
 import type { CalendarService } from '../../vendored/services/CalendarService.js'
 import type { ChatService } from '../../vendored/services/ChatService.js'

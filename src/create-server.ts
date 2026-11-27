@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import { SERVER_NAME } from './constants.js'
 import { registerTools } from './tools/registry.js'
 
@@ -29,10 +29,10 @@ function getVersion(): string {
  * tools resolve the Google client from credential-state internally. Used
  * later by HTTP (M3); created now for parity with the other servers.
  */
-export function createMCPServer(): Server {
-  const server = new Server(
+export function createMCPServer(): McpServer {
+  const server = new McpServer(
     { name: `@n24q02m/${SERVER_NAME}`, version: getVersion() },
-    { capabilities: { tools: {}, resources: {} } }
+    { capabilities: { resources: {} } }
   )
   registerTools(server)
   return server

@@ -11,13 +11,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, sep } from 'node:path'
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import {
-  CallToolRequestSchema,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  ReadResourceRequestSchema
-} from '@modelcontextprotocol/sdk/types.js'
+import { isInputRequiredResult, type McpServer, ResourceTemplate, type Tool } from '@modelcontextprotocol/server'
 import { CONFIG_ACTIONS } from './config.js'
 import { DOCS_DIR, dispatchTool, HELP_TOPICS } from './dispatch.js'
 import type { DomainDef } from './domains/index.js'
@@ -162,62 +156,79 @@ export const INFRA_TOOLS: readonly InfraToolDefinition[] = [
   }
 ]
 
-function toolDefinitions(allowLocalFilesystem: boolean) {
-  return [...DOMAINS.map((domain) => domainToolDef(domain, allowLocalFilesystem)), ...INFRA_TOOLS]
+function toolDefinitions(allowLocalFilesystem: boolean): Tool[] {
+  return [...DOMAINS.map((domain) => domainToolDef(domain, allowLocalFilesystem)), ...INFRA_TOOLS] as Tool[]
 }
 
 /**
- * Register all tools with the MCP server. Single-account M1 -- no client factory.
+ * Register all tools and doc resources on the MCP server.
+ * Uses `McpServer.registerResource` so doc resources (`workspace://docs/*`)
+ * coexist with `attachSkillsProvider` (`skill://*`), while keeping the exact
+ * derived JSON-schema tool definitions on `tools/list` and era-aware projection
+ * on `tools/call`.
  */
 export function registerTools(
-  server: Server,
+  server: McpServer,
   { allowLocalFilesystem = true }: { allowLocalFilesystem?: boolean } = {}
 ) {
   const tools = toolDefinitions(allowLocalFilesystem)
+  const lowLevel = server.server
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  lowLevel.registerCapabilities({ tools: {} })
+
+  lowLevel.setRequestHandler('tools/list', async () => ({
     tools
   }))
 
-  // Resources handlers for full documentation
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: PRECOMPUTED_RESOURCES
-  }))
+  server.registerResource(
+    'workspace-docs',
+    new ResourceTemplate('workspace://docs/{topic}', {
+      list: async () => ({ resources: PRECOMPUTED_RESOURCES }),
+      complete: undefined
+    }),
+    { mimeType: 'text/markdown' },
+    async (uri) => {
+      const resource = RESOURCE_MAP.get(uri.href)
 
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    const { uri } = request.params
-    const resource = RESOURCE_MAP.get(uri)
-
-    if (!resource) {
-      throw new WorkspaceMCPError(
-        `Resource not found: ${uri}`,
-        'RESOURCE_NOT_FOUND',
-        `Available: ${AVAILABLE_RESOURCE_URIS}`
-      )
-    }
-
-    const fullPath = join(DOCS_DIR, basename(resource.file))
-    const rel = relative(DOCS_DIR, fullPath)
-    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-      throw new WorkspaceMCPError('Path traversal attempt detected', 'SECURITY_ERROR', 'Invalid resource URI')
-    }
-
-    try {
-      const content = await readFile(fullPath, 'utf-8')
-      return {
-        contents: [{ uri, mimeType: 'text/markdown', text: content }]
+      if (!resource) {
+        throw new WorkspaceMCPError(
+          `Resource not found: ${uri.href}`,
+          'RESOURCE_NOT_FOUND',
+          `Available: ${AVAILABLE_RESOURCE_URIS}`
+        )
       }
-    } catch {
-      throw new WorkspaceMCPError(
-        `Documentation not found for: ${resource.name}`,
-        'DOC_NOT_FOUND',
-        'Check resource URI'
-      )
-    }
-  })
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const fullPath = join(DOCS_DIR, basename(resource.file))
+      const rel = relative(DOCS_DIR, fullPath)
+      if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+        throw new WorkspaceMCPError('Path traversal attempt detected', 'SECURITY_ERROR', 'Invalid resource URI')
+      }
+
+      try {
+        const content = await readFile(fullPath, 'utf-8')
+        return {
+          contents: [{ uri: uri.href, mimeType: 'text/markdown', text: content }]
+        }
+      } catch {
+        throw new WorkspaceMCPError(
+          `Documentation not found for: ${resource.name}`,
+          'DOC_NOT_FOUND',
+          'Check resource URI'
+        )
+      }
+    }
+  )
+
+  lowLevel.setRequestHandler('tools/call', async (request, ctx) => {
     const { name, arguments: args } = request.params
-    return dispatchTool(name, args, { allowLocalFilesystem })
+    const result = await dispatchTool(name, args, {
+      allowLocalFilesystem,
+      mcpContext: {
+        serverContext: ctx,
+        clientCapabilities: lowLevel.getClientCapabilities()
+      }
+    })
+    if (isInputRequiredResult(result)) return result
+    return lowLevel.projectCallToolResult(result, undefined)
   })
 }

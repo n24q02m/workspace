@@ -20,7 +20,7 @@
  * `<tool> <action>` with flags derived from the tool's input schema.
  */
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import type { CliHandler } from '@n24q02m/hull'
 import { dispatchTool, HELP_TOPICS } from '../tools/dispatch.js'
 import { DOMAINS } from '../tools/domains/index.js'

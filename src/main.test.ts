@@ -1,10 +1,14 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import type * as Hull from '@n24q02m/hull'
 import { buildCli } from '@n24q02m/hull'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as RegistryModule from './tools/registry.js'
+
+const { skillsAttachMock } = vi.hoisted(() => ({
+  skillsAttachMock: vi.fn()
+}))
 
 // startServer/bootstrap need every I/O-touching dependency mocked so the
 // suite stays hermetic: no real Google OAuth, no real stdio transport.
@@ -13,9 +17,12 @@ vi.mock('./auth/credential-state.js', () => ({
   resolveCredentialState: vi.fn()
 }))
 vi.mock('./auth/oauth-setup.js', () => ({ runOAuthSetup: vi.fn() }))
+vi.mock('./skills.js', () => ({
+  loadWorkspaceSkillsCatalog: vi.fn().mockResolvedValue({ attach: skillsAttachMock })
+}))
 // Keep the registry's data (the `config-tool` spec in cli/tools.ts is derived
 // from INFRA_TOOLS) and stub only the registration entry point, which would
-// otherwise touch a real Server.
+// otherwise touch a real McpServer.
 vi.mock('./tools/registry.js', async () => {
   const actual = await vi.importActual<typeof RegistryModule>('./tools/registry.js')
   return { ...actual, registerTools: vi.fn() }
@@ -33,11 +40,15 @@ vi.mock('./data-dir.js', () => ({
   applyDataDirOverride: vi.fn(),
   prepareDataDir: vi.fn().mockResolvedValue({ migrated: [], kept: [], deferred: [] })
 }))
-vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
+vi.mock('@modelcontextprotocol/server/stdio', () => ({
   // Must be `new`-able (main.ts does `new StdioServerTransport()`) -- an
   // arrow-function mock implementation cannot be a constructor.
   StdioServerTransport: vi.fn(function StdioServerTransport(this: { start: () => Promise<void> }) {
     this.start = vi.fn().mockResolvedValue(undefined)
+  }),
+  serveStdio: vi.fn((factory: () => unknown) => {
+    factory()
+    return vi.fn().mockResolvedValue(undefined)
   })
 }))
 
@@ -127,7 +138,8 @@ describe('startServer', () => {
 
     expect(runOAuthSetup).not.toHaveBeenCalled()
     expect(resolveCredentialState).toHaveBeenCalledOnce()
-    expect(registerTools).toHaveBeenCalledWith(expect.any(Server))
+    expect(skillsAttachMock).toHaveBeenCalledWith(expect.any(McpServer))
+    expect(registerTools).toHaveBeenCalledWith(expect.any(McpServer))
   })
 
   it('runs OAuth setup before serving when not yet configured', async () => {
@@ -139,7 +151,8 @@ describe('startServer', () => {
 
     expect(runOAuthSetup).toHaveBeenCalledOnce()
     expect(resolveCredentialState).toHaveBeenCalledTimes(2)
-    expect(registerTools).toHaveBeenCalledWith(expect.any(Server))
+    expect(skillsAttachMock).toHaveBeenCalledWith(expect.any(McpServer))
+    expect(registerTools).toHaveBeenCalledWith(expect.any(McpServer))
   })
 
   it('returns early on a second call in the same process (fork-bomb guard)', async () => {

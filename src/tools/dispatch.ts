@@ -12,13 +12,15 @@
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import { type CallToolResult, type InputRequiredResult, isInputRequiredResult } from '@modelcontextprotocol/server'
 import { getState, resolveCredentialState } from '../auth/credential-state.js'
 import { hostAuthCommand } from '../auth/subject-context.js'
 import { type ConfigInput, config } from './config.js'
 import type { DomainRunInput } from './domains/factory.js'
 import { DOMAINS } from './domains/index.js'
+import { confirmSensitiveOperation, resolveElicitedAccount } from './helpers/elicitation.js'
 import { aiReadableMessage, findClosestMatch, WorkspaceMCPError } from './helpers/errors.js'
+import { type McpDispatchContext, runWithMcpContext } from './helpers/mcp-context.js'
 
 // Tools that work without a configured Google account.
 // 'time' is a no-auth domain (local date/time helpers) — exempt from the credential gate.
@@ -76,11 +78,21 @@ async function helpTopic(topic: string): Promise<CallToolResult> {
  * every failure comes back as `isError: true` with an AI-readable message, so
  * both callers (stdio/http server and the CLI) report it the same way.
  */
+export function dispatchTool(
+  name: string,
+  args: Record<string, unknown> | undefined,
+  options?: { allowLocalFilesystem?: boolean; mcpContext?: undefined }
+): Promise<CallToolResult>
+export function dispatchTool(
+  name: string,
+  args: Record<string, unknown> | undefined,
+  options: { allowLocalFilesystem?: boolean; mcpContext?: McpDispatchContext }
+): Promise<CallToolResult | InputRequiredResult>
 export async function dispatchTool(
   name: string,
   args: Record<string, unknown> | undefined,
-  { allowLocalFilesystem = true }: { allowLocalFilesystem?: boolean } = {}
-): Promise<CallToolResult> {
+  { allowLocalFilesystem = true, mcpContext }: { allowLocalFilesystem?: boolean; mcpContext?: McpDispatchContext } = {}
+): Promise<CallToolResult | InputRequiredResult> {
   if (!args) {
     return errorResult('Error: No arguments provided')
   }
@@ -101,54 +113,81 @@ export async function dispatchTool(
   }
 
   try {
-    const domain = DOMAIN_MAP.get(name)
-    if (domain) {
-      // A local-only parameter names a path on the server's disk (Gmail draft
-      // attachments are read from it), so a remote call carrying one is
-      // refused even when its action is otherwise available.
-      const localOnlyProp = allowLocalFilesystem
-        ? undefined
-        : domain.localOnlyInputProps?.find((prop) => args[prop] !== undefined)
-      if (localOnlyProp !== undefined) {
-        throw new WorkspaceMCPError(
-          `Parameter not available in this transport: ${localOnlyProp}`,
-          'VALIDATION_ERROR',
-          'Use the parameters listed in the tool schema.'
-        )
-      }
-      // `args` arrives as `unknown` values from JSON-RPC / argv; the domain's
-      // factory validates `action` against its own list before dispatching.
-      return await domain.run(args as DomainRunInput)
-    }
-
-    switch (name) {
-      case 'config':
-        // `config()` validates each action itself; the cast only restores the
-        // call shape the JSON-RPC/argv payload lost.
-        return await config(args as unknown as ConfigInput)
-
-      case 'help': {
-        const topic = args.topic
-        if (typeof topic !== 'string') {
+    return await runWithMcpContext(mcpContext, async () => {
+      const serverCtx = mcpContext?.serverContext
+      const domain = DOMAIN_MAP.get(name)
+      if (domain) {
+        // A local-only parameter names a path on the server's disk (Gmail draft
+        // attachments are read from it), so a remote call carrying one is
+        // refused even when its action is otherwise available.
+        const localOnlyProp = allowLocalFilesystem
+          ? undefined
+          : domain.localOnlyInputProps?.find((prop) => args[prop] !== undefined)
+        if (localOnlyProp !== undefined) {
           throw new WorkspaceMCPError(
-            'help requires a topic',
+            `Parameter not available in this transport: ${localOnlyProp}`,
             'VALIDATION_ERROR',
-            `Valid topics: ${VALID_HELP_TOPICS_STRING}`
+            'Use the parameters listed in the tool schema.'
           )
         }
-        return await helpTopic(topic)
+
+        let effectiveArgs = args
+        let selectedAccount: string | undefined
+        if (domain.name !== 'time') {
+          const accountResolution = await resolveElicitedAccount(name, args, serverCtx)
+          if (accountResolution.earlyResult) {
+            return accountResolution.earlyResult
+          }
+          selectedAccount = accountResolution.account
+          if (selectedAccount !== undefined && args.account === undefined) {
+            effectiveArgs = { ...args, account: selectedAccount }
+          }
+        }
+
+        const confirmation = await confirmSensitiveOperation(name, effectiveArgs, serverCtx, selectedAccount)
+        if (confirmation) {
+          return isInputRequiredResult(confirmation) ? confirmation : confirmation
+        }
+
+        // `args` arrives as `unknown` values from JSON-RPC / argv; the domain's
+        // factory validates `action` against its own list before dispatching.
+        return await domain.run(effectiveArgs as DomainRunInput)
       }
 
-      default: {
-        const closest = findClosestMatch(name, TOOL_NAMES)
-        const suggestion = closest ? ` Did you mean '${closest}'?` : ''
-        throw new WorkspaceMCPError(
-          `Unknown tool: ${name}.${suggestion}`,
-          'UNKNOWN_TOOL',
-          `Available tools: ${TOOL_NAMES.join(', ')}`
-        )
+      switch (name) {
+        case 'config': {
+          const confirmation = await confirmSensitiveOperation(name, args, serverCtx)
+          if (confirmation) {
+            return confirmation
+          }
+          // `config()` validates each action itself; the cast only restores the
+          // call shape the JSON-RPC/argv payload lost.
+          return await config(args as unknown as ConfigInput)
+        }
+
+        case 'help': {
+          const topic = args.topic
+          if (typeof topic !== 'string') {
+            throw new WorkspaceMCPError(
+              'help requires a topic',
+              'VALIDATION_ERROR',
+              `Valid topics: ${VALID_HELP_TOPICS_STRING}`
+            )
+          }
+          return await helpTopic(topic)
+        }
+
+        default: {
+          const closest = findClosestMatch(name, TOOL_NAMES)
+          const suggestion = closest ? ` Did you mean '${closest}'?` : ''
+          throw new WorkspaceMCPError(
+            `Unknown tool: ${name}.${suggestion}`,
+            'UNKNOWN_TOOL',
+            `Available tools: ${TOOL_NAMES.join(', ')}`
+          )
+        }
       }
-    }
+    })
   } catch (error) {
     const enhancedError =
       error instanceof WorkspaceMCPError

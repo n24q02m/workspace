@@ -5,7 +5,7 @@
  * -- works independently of the domain tools.
  */
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/server'
 import { startAddAccount } from '../auth/add-account.js'
 import { getAuth, getState, resetState, resolveCredentialState } from '../auth/credential-state.js'
 import { currentSubject, hostAuthCommand } from '../auth/subject-context.js'
